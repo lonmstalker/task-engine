@@ -86,6 +86,40 @@ final class PostgresTaskRepository {
         WHERE id = ?
         """;
 
+    private static final @NonNull String SELECT_CHAIN_SQL = """
+        WITH RECURSIVE chain AS (
+            SELECT t.*
+            FROM task_tasks t
+            WHERE t.id = ?
+            UNION
+            SELECT dep.*
+            FROM task_links l
+            JOIN task_tasks dep ON dep.id = l.linked_task_id
+            JOIN chain c ON c.id = l.task_id
+            WHERE l.link_type = 'DEPENDS_ON'
+        )
+        SELECT *
+        FROM chain
+        """;
+
+    private static final @NonNull String SELECT_DEPENDENTS_SQL = """
+        WITH RECURSIVE dependents AS (
+            SELECT t.id
+            FROM task_links l
+            JOIN task_tasks t ON t.id = l.task_id
+            WHERE l.link_type = 'DEPENDS_ON'
+              AND l.linked_task_id = ?
+            UNION
+            SELECT t.id
+            FROM task_links l
+            JOIN task_tasks t ON t.id = l.task_id
+            JOIN dependents d ON d.id = l.linked_task_id
+            WHERE l.link_type = 'DEPENDS_ON'
+        )
+        SELECT id
+        FROM dependents
+        """;
+
     private static final @NonNull String CLAIM_SQL = """
         WITH candidate AS (
             SELECT t.id
@@ -267,6 +301,58 @@ final class PostgresTaskRepository {
             });
         } catch (SQLException e) {
             throw new TaskStoreException("Failed to find task by id", e);
+        }
+    }
+
+    @NonNull List<TaskRecord> loadChainRecords(
+        @NonNull TaskId terminalTaskId
+    ) {
+        Objects.requireNonNull(terminalTaskId, "terminalTaskId");
+
+        List<TaskRecord> records = new ArrayList<>();
+
+        try {
+            return transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(SELECT_CHAIN_SQL)) {
+                    statement.setObject(1, terminalTaskId.value());
+
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        while (resultSet.next()) {
+                            records.add(mapRecord(resultSet));
+                        }
+                    }
+
+                    return List.copyOf(records);
+                }
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to load task chain", e);
+        }
+    }
+
+    @NonNull List<TaskId> loadDependentTaskIds(
+        @NonNull TaskId rootTaskId
+    ) {
+        Objects.requireNonNull(rootTaskId, "rootTaskId");
+
+        List<TaskId> dependents = new ArrayList<>();
+
+        try {
+            return transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(SELECT_DEPENDENTS_SQL)) {
+                    statement.setObject(1, rootTaskId.value());
+
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        while (resultSet.next()) {
+                            dependents.add(new TaskId((UUID) resultSet.getObject("id")));
+                        }
+                    }
+
+                    return List.copyOf(dependents);
+                }
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to load dependent task ids", e);
         }
     }
 

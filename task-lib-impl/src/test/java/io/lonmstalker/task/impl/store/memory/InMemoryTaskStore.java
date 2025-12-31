@@ -10,9 +10,15 @@ import io.lonmstalker.task.api.store.TaskClaim;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskRecordUpdater;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskChainStore;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,7 +31,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * In-memory store for tests.
  */
 @ThreadSafe
-public final class InMemoryTaskStore implements TaskStore {
+public final class InMemoryTaskStore implements TaskStore, TaskChainStore {
 
     private final @NonNull Map<TaskKey, TaskRecord> byKey = new ConcurrentHashMap<>();
     private final @NonNull Map<TaskId, TaskRecord> byId = new ConcurrentHashMap<>();
@@ -187,6 +193,82 @@ public final class InMemoryTaskStore implements TaskStore {
         }
 
         return false;
+    }
+
+    @Override
+    public @NonNull List<TaskRecord> loadChainRecords(
+        @NonNull TaskId terminalTaskId
+    ) {
+        Objects.requireNonNull(terminalTaskId, "terminalTaskId");
+
+        TaskRecord terminal = byId.get(terminalTaskId);
+        if (terminal == null) {
+            return List.of();
+        }
+
+        Map<TaskId, TaskRecord> records = new LinkedHashMap<>();
+        Deque<TaskId> queue = new ArrayDeque<>();
+        records.put(terminalTaskId, terminal);
+        queue.add(terminalTaskId);
+
+        while (!queue.isEmpty()) {
+            TaskId current = queue.removeFirst();
+            List<TaskLink> taskLinks = links.get(current);
+            if (taskLinks == null || taskLinks.isEmpty()) {
+                continue;
+            }
+
+            for (TaskLink link : taskLinks) {
+                if (link.type() != TaskLinkType.DEPENDS_ON) {
+                    continue;
+                }
+                TaskId dependencyId = link.targetId();
+                if (records.containsKey(dependencyId)) {
+                    continue;
+                }
+                TaskRecord dependency = byId.get(dependencyId);
+                if (dependency == null) {
+                    continue;
+                }
+                records.put(dependencyId, dependency);
+                queue.add(dependencyId);
+            }
+        }
+
+        return List.copyOf(records.values());
+    }
+
+    @Override
+    public @NonNull List<TaskId> loadDependentTaskIds(
+        @NonNull TaskId rootTaskId
+    ) {
+        Objects.requireNonNull(rootTaskId, "rootTaskId");
+
+        Map<TaskId, List<TaskId>> dependents = new HashMap<>();
+        for (Map.Entry<TaskId, List<TaskLink>> entry : links.entrySet()) {
+            for (TaskLink link : entry.getValue()) {
+                if (link.type() != TaskLinkType.DEPENDS_ON) {
+                    continue;
+                }
+                dependents.computeIfAbsent(link.targetId(), ignored -> new ArrayList<>())
+                    .add(entry.getKey());
+            }
+        }
+
+        LinkedHashSet<TaskId> collected = new LinkedHashSet<>();
+        Deque<TaskId> queue = new ArrayDeque<>(dependents.getOrDefault(rootTaskId, List.of()));
+        while (!queue.isEmpty()) {
+            TaskId current = queue.removeFirst();
+            if (!collected.add(current)) {
+                continue;
+            }
+            List<TaskId> downstream = dependents.get(current);
+            if (downstream != null) {
+                queue.addAll(downstream);
+            }
+        }
+
+        return List.copyOf(collected);
     }
 
     @Override

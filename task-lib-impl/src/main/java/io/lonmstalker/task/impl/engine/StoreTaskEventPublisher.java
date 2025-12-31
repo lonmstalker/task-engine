@@ -16,6 +16,7 @@ import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskStore;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -144,7 +145,8 @@ final class StoreTaskEventPublisher implements TaskEventPublisher {
         @NonNull TaskRecord terminalRecord,
         @NonNull Instant now
     ) {
-        if (chainResolver.hasDependents(terminalRecord.id())) {
+        if (terminalRecord.status() != TaskStatus.FAILED
+            && chainResolver.hasDependents(terminalRecord.id())) {
             return;
         }
 
@@ -168,6 +170,17 @@ final class StoreTaskEventPublisher implements TaskEventPublisher {
             chainTaskIds.add(record.id());
         }
 
+        List<TaskId> attachTaskIds = chainTaskIds;
+        if (terminalRecord.status() == TaskStatus.FAILED) {
+            List<TaskId> dependents = chainResolver.loadDependentTaskIds(terminalRecord.id());
+            if (!dependents.isEmpty()) {
+                LinkedHashSet<TaskId> unique = new LinkedHashSet<>(chainTaskIds.size() + dependents.size());
+                unique.addAll(chainTaskIds);
+                unique.addAll(dependents);
+                attachTaskIds = new ArrayList<>(unique);
+            }
+        }
+
         TaskEventRecord event = new TaskEventRecord(
             TaskEventId.random(),
             terminalRecord.id(),
@@ -177,7 +190,7 @@ final class StoreTaskEventPublisher implements TaskEventPublisher {
             now
         );
 
-        eventStore.createEvent(event, contexts, chainTaskIds);
+        eventStore.createEvent(event, contexts, attachTaskIds);
     }
 
     private boolean shouldIncludeChainContext(

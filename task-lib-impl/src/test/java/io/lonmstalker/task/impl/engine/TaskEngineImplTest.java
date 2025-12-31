@@ -194,6 +194,50 @@ class TaskEngineImplTest {
     }
 
     @Nested
+    @DisplayName("State machine")
+    class StateMachine {
+
+        @Test
+        @DisplayName("shouldFail_WhenInvalidTransitionReturned")
+        void shouldFail_WhenInvalidTransitionReturned() {
+            InMemoryTaskStore store = new InMemoryTaskStore();
+
+            TaskDefinition<String> definition = TaskDefinition.<String>builder()
+                .type(TaskType.of("invalid-transition"))
+                .handler(context -> TaskResult.success(TaskState.of("INVALID")))
+                .contextCodec(new StringCodec())
+                .contextMerger((existing, incoming) -> existing)
+                .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+                .retryPolicy(RetryPolicies.none())
+                .build();
+
+            try (TaskEngine engine = TaskEngineBuilder.builder()
+                .store(store)
+                .dispatcher(new DirectTaskDispatcher())
+                .registerDefinition(definition)
+                .build()) {
+
+                TaskKey key = TaskKey.of("task-invalid-transition");
+
+                engine.submit(new TaskRequest<>(
+                    key,
+                    definition.type(),
+                    STATE_NEW,
+                    "ctx",
+                    List.of()
+                ));
+
+                TaskEngineImpl impl = (TaskEngineImpl) engine;
+                impl.pollOnce();
+
+                TaskRecord record = store.findByKey(key);
+                assertThat(record).isNotNull();
+                assertThat(record.status()).isEqualTo(TaskStatus.FAILED);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Concurrency")
     class Concurrency {
 
@@ -696,6 +740,71 @@ class TaskEngineImplTest {
                 List<TaskEventContextEntry> contexts = eventStore.findContexts(event.id());
                 assertThat(contexts).anyMatch(entry -> entry.kind() == TaskEventContextKind.REQUEST);
                 assertThat(contexts).anyMatch(entry -> entry.kind() == TaskEventContextKind.CHAIN);
+            }
+        }
+
+        @Test
+        @DisplayName("shouldCreateEventForFailedTaskWithDependents")
+        void shouldCreateEventForFailedTaskWithDependents() {
+            InMemoryTaskStore store = new InMemoryTaskStore();
+            InMemoryTaskEventStore eventStore = new InMemoryTaskEventStore();
+            TaskContextCodec<String> codec = new StringCodec();
+
+            TaskDefinition<String> definitionA = TaskDefinition.<String>builder()
+                .type(TaskType.of("fail-parent"))
+                .handler(context -> TaskResult.failure(new TaskExecutionException("boom")))
+                .contextCodec(codec)
+                .contextMerger((existing, incoming) -> existing)
+                .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+                .retryPolicy(RetryPolicies.none())
+                .build();
+
+            TaskDefinition<String> definitionB = TaskDefinition.<String>builder()
+                .type(TaskType.of("child"))
+                .handler(context -> TaskResult.success())
+                .contextCodec(codec)
+                .contextMerger((existing, incoming) -> existing)
+                .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+                .retryPolicy(RetryPolicies.none())
+                .build();
+
+            try (TaskEngine engine = TaskEngineBuilder.builder()
+                .store(store)
+                .eventStore(eventStore)
+                .dispatcher(new DirectTaskDispatcher())
+                .registerDefinition(definitionA)
+                .registerDefinition(definitionB)
+                .build()) {
+
+                TaskSubmissionResult createdA = engine.submit(new TaskRequest<>(
+                    TaskKey.of("parent"),
+                    definitionA.type(),
+                    STATE_NEW,
+                    "ctx-a",
+                    List.of()
+                ));
+
+                TaskLink linkA = new TaskLink(createdA.snapshot().id(), TaskLinkType.DEPENDS_ON);
+                engine.submit(new TaskRequest<>(
+                    TaskKey.of("child"),
+                    definitionB.type(),
+                    STATE_NEW,
+                    "ctx-b",
+                    List.of(linkA)
+                ));
+
+                TaskEngineImpl impl = (TaskEngineImpl) engine;
+                impl.pollOnce();
+
+                List<TaskEventRecord> events = eventStore.findEventsByTaskId(createdA.snapshot().id());
+                assertThat(events).hasSize(1);
+
+                TaskEventRecord event = events.get(0);
+                List<TaskEventContextEntry> contexts = eventStore.findContexts(event.id());
+                assertThat(contexts).anyMatch(entry ->
+                    entry.kind() == TaskEventContextKind.REQUEST
+                        && codec.decode(entry.payload()).equals("ctx-b")
+                );
             }
         }
     }

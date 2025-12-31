@@ -10,6 +10,7 @@ import io.lonmstalker.task.api.model.TaskId;
 import io.lonmstalker.task.api.model.TaskKey;
 import io.lonmstalker.task.api.model.TaskPayload;
 import io.lonmstalker.task.api.model.TaskType;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,7 +20,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.StringJoiner;
 import java.util.UUID;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -61,6 +61,14 @@ final class PostgresEventRepository {
         FROM task_event_contexts
         WHERE event_id = ?
         ORDER BY id
+        """;
+
+    private static final @NonNull String ATTACH_PENDING_CONTEXTS_SQL = """
+        UPDATE task_event_contexts
+        SET event_id = ?
+        WHERE event_id IS NULL
+          AND context_kind IN ('REQUEST', 'DUPLICATE')
+          AND task_id = ANY (?)
         """;
 
     private final @NonNull PostgresTransactionManager transactionManager;
@@ -261,31 +269,19 @@ final class PostgresEventRepository {
             return;
         }
 
-        String attachSql = buildAttachPendingSql(taskIds.size());
-        try (PreparedStatement statement = connection.prepareStatement(attachSql)) {
+        try (PreparedStatement statement = connection.prepareStatement(ATTACH_PENDING_CONTEXTS_SQL)) {
             statement.setObject(1, eventId.value());
-            int index = 2;
-            for (TaskId taskId : taskIds) {
-                statement.setObject(index++, taskId.value());
+            Array taskIdArray = connection.createArrayOf(
+                "uuid",
+                taskIds.stream().map(TaskId::value).toArray(UUID[]::new)
+            );
+            try {
+                statement.setArray(2, taskIdArray);
+                statement.executeUpdate();
+            } finally {
+                taskIdArray.free();
             }
-            statement.executeUpdate();
         }
-    }
-
-    private @NonNull String buildAttachPendingSql(
-        int taskCount
-    ) {
-        StringJoiner joiner = new StringJoiner(", ", "(", ")");
-        for (int i = 0; i < taskCount; i++) {
-            joiner.add("?");
-        }
-
-        return """
-            UPDATE task_event_contexts
-            SET event_id = ?
-            WHERE event_id IS NULL
-              AND context_kind IN ('REQUEST', 'DUPLICATE')
-              AND task_id IN """ + joiner;
     }
 
     private @NonNull TaskEventRecord mapEventRecord(

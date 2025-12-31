@@ -5,6 +5,7 @@ import io.lonmstalker.task.api.model.TaskLink;
 import io.lonmstalker.task.api.model.TaskLinkType;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskChainStore;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -12,15 +13,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 final class TaskChainResolver {
 
     private final @NonNull TaskStore store;
+    private final @Nullable TaskChainStore chainStore;
 
     TaskChainResolver(
         @NonNull TaskStore store
     ) {
         this.store = Objects.requireNonNull(store, "store");
+        this.chainStore = store instanceof TaskChainStore ? (TaskChainStore) store : null;
     }
 
     boolean hasDependents(
@@ -32,6 +36,10 @@ final class TaskChainResolver {
     @NonNull List<TaskRecord> loadChainRecords(
         @NonNull TaskRecord terminalRecord
     ) {
+        if (chainStore != null) {
+            return chainStore.loadChainRecords(terminalRecord.id());
+        }
+
         Map<TaskId, TaskRecord> records = new LinkedHashMap<>();
         Deque<TaskId> queue = new ArrayDeque<>();
 
@@ -61,5 +69,15 @@ final class TaskChainResolver {
         }
 
         return List.copyOf(records.values());
+    }
+
+    @NonNull List<TaskId> loadDependentTaskIds(
+        @NonNull TaskId rootTaskId
+    ) {
+        if (chainStore == null) {
+            return List.of();
+        }
+
+        return chainStore.loadDependentTaskIds(rootTaskId);
     }
 }

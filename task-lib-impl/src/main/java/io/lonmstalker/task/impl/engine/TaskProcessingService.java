@@ -125,7 +125,20 @@ final class TaskProcessingService {
         @NonNull TaskDefinition<C> definition,
         @NonNull Success success
     ) {
-        TaskState nextState = resolveNextState(record, definition, success.nextState());
+        TaskState nextState;
+        try {
+            nextState = resolveNextState(record, definition, success.nextState());
+        } catch (TaskStateException e) {
+            handleFailure(record, definition, e);
+            return;
+        } catch (RuntimeException e) {
+            handleFailure(
+                record,
+                definition,
+                new TaskExecutionException("State machine transition failed", e)
+            );
+            return;
+        }
         Instant now = now();
 
         if (definition.stateMachine().isTerminal(nextState)) {

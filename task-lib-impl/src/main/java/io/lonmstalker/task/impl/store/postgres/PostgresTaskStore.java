@@ -13,6 +13,7 @@ import io.lonmstalker.task.api.store.TaskClaim;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskRecordUpdater;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskChainStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -26,7 +27,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * PostgreSQL-backed task store.
  */
 @ThreadSafe
-public final class PostgresTaskStore implements TaskStore, TaskEventTransactionalStore {
+public final class PostgresTaskStore implements TaskStore, TaskEventTransactionalStore, TaskChainStore {
 
     private final @NonNull PostgresTransactionManager transactionManager;
     private final @NonNull PostgresTaskRepository taskRepository;
@@ -98,6 +99,20 @@ public final class PostgresTaskStore implements TaskStore, TaskEventTransactiona
         @NonNull TaskId id
     ) {
         return taskRepository.hasDependents(id);
+    }
+
+    @Override
+    public @NonNull List<TaskRecord> loadChainRecords(
+        @NonNull TaskId terminalTaskId
+    ) {
+        return taskRepository.loadChainRecords(terminalTaskId);
+    }
+
+    @Override
+    public @NonNull List<TaskId> loadDependentTaskIds(
+        @NonNull TaskId rootTaskId
+    ) {
+        return taskRepository.loadDependentTaskIds(rootTaskId);
     }
 
     @Override
