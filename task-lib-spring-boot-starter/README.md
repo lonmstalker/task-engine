@@ -15,6 +15,7 @@ It registers:
 - `TaskEngine`
 - `TaskEngineLifecycle`
 - `TaskDispatcherReporter` (logs configuration + registers metrics when Micrometer is present)
+- `KafkaTaskEventPublisher` + `KafkaTaskEventPublisherLifecycle` when `task.kafka.enabled=true`
 
 ## Properties
 
@@ -32,6 +33,22 @@ Prefix: `task.engine`
 | `dispatcher.virtual-threads` | `true` | Use virtual threads for dispatching tasks. |
 | `dispatcher.parallelism` | CPU count | Dispatcher parallelism hint. |
 | `dispatcher.thread-name-format` | `task-worker-%d` | Thread name format for dispatcher threads. |
+
+Prefix: `task.kafka`
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Enable Kafka outbox publisher. |
+| `auto-start` | `true` | Start publisher automatically via `SmartLifecycle`. |
+| `poll-interval` | `PT1S` | Polling interval for outbox publish loop. |
+| `lease-duration` | `PT30S` | Lease duration for outbox claims. |
+| `batch-size` | `100` | Max events claimed per poll. |
+| `publish-timeout` | `PT30S` | Max time to await Kafka publish. |
+| `bootstrap-servers` | none | Kafka bootstrap servers. |
+| `producer-properties.*` | none | Extra Kafka producer properties. |
+| `topic` | none | Kafka topic for task events. |
+| `lease-owner` | auto | Lease owner identity for outbox claims. |
+| `thread-name-format` | `task-kafka-publisher-%d` | Thread name format for publisher thread. |
 
 ## Metrics
 
@@ -80,4 +97,12 @@ task:
       virtual-threads: true
       parallelism: 64
       thread-name-format: "task-vt-%d"
+```
+
+```yaml
+task:
+  kafka:
+    enabled: true
+    topic: "task-events"
+    bootstrap-servers: "localhost:9092"
 ```

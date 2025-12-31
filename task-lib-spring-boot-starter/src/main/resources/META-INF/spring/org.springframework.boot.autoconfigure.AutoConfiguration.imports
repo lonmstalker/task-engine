@@ -1,1 +1,2 @@
 io.lonmstalker.task.spring.autoconfigure.TaskEngineAutoConfiguration
+io.lonmstalker.task.spring.autoconfigure.TaskKafkaAutoConfiguration
