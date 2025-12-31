@@ -6,5 +6,6 @@ rootProject.name = "task-lib"
 
 include("task-lib-api")
 include("task-lib-impl")
+include("task-lib-kafka")
 include("task-lib-spring-boot-starter")
 include("task-lib-integration-test")
