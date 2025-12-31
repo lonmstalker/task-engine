@@ -1,0 +1,26 @@
+[versions]
+guava = "33.2.1-jre"
+checker-qual = "3.42.0"
+slf4j = "2.0.13"
+lombok = "1.18.34"
+junit = "5.10.2"
+junit-platform = "1.10.2"
+spring-boot = "3.2.5"
+micrometer = "1.12.5"
+assertj = "3.25.3"
+jcip = "1.0"
+
+[libraries]
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+checker-qual = { module = "org.checkerframework:checker-qual", version.ref = "checker-qual" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
+spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter", version.ref = "spring-boot" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
+micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
+assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+jcip-annotations = { module = "net.jcip:jcip-annotations", version.ref = "jcip" }
