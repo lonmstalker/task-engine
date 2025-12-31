@@ -173,6 +173,23 @@ public final class InMemoryTaskStore implements TaskStore {
     }
 
     @Override
+    public boolean hasDependents(
+        @NonNull TaskId id
+    ) {
+        Objects.requireNonNull(id, "id");
+
+        for (List<TaskLink> taskLinks : links.values()) {
+            for (TaskLink link : taskLinks) {
+                if (link.type() == TaskLinkType.DEPENDS_ON && link.targetId().equals(id)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    @Override
     public void resetExpiredLeases(
         @NonNull Instant now
     ) {

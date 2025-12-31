@@ -6,6 +6,13 @@ import io.lonmstalker.task.api.TaskContextCodec;
 import io.lonmstalker.task.api.TaskDefinition;
 import io.lonmstalker.task.api.TaskDispatcher;
 import io.lonmstalker.task.api.TaskEngine;
+import io.lonmstalker.task.api.event.TaskEventContextEntry;
+import io.lonmstalker.task.api.event.TaskEventContextKind;
+import io.lonmstalker.task.api.event.TaskEventId;
+import io.lonmstalker.task.api.event.TaskEventRecord;
+import io.lonmstalker.task.api.event.TaskEventStore;
+import io.lonmstalker.task.api.event.TaskEventTransactionalStore;
+import io.lonmstalker.task.api.event.TaskEventType;
 import io.lonmstalker.task.api.error.TaskConfigException;
 import io.lonmstalker.task.api.error.TaskDuplicateException;
 import io.lonmstalker.task.api.error.TaskExecutionException;
@@ -16,6 +23,7 @@ import io.lonmstalker.task.api.model.TaskExecutionContext;
 import io.lonmstalker.task.api.model.TaskId;
 import io.lonmstalker.task.api.model.TaskKey;
 import io.lonmstalker.task.api.model.TaskLink;
+import io.lonmstalker.task.api.model.TaskLinkType;
 import io.lonmstalker.task.api.model.TaskPayload;
 import io.lonmstalker.task.api.model.TaskRequest;
 import io.lonmstalker.task.api.model.TaskResult;
@@ -35,11 +43,16 @@ import io.lonmstalker.task.api.store.TaskStore;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +79,9 @@ public final class TaskEngineImpl implements TaskEngine {
     private final @NonNull String engineId;
     private final @NonNull Map<TaskType, TaskDefinition<?>> definitions;
     private final @NonNull ScheduledExecutorService scheduler;
+    private final @Nullable TaskEventStore eventStore;
+    private final @Nullable TaskEventTransactionalStore transactionalEventStore;
+    private final boolean sharedEventStore;
     private final @NonNull AtomicBoolean started = new AtomicBoolean(false);
     private final @NonNull AtomicBoolean closed = new AtomicBoolean(false);
 
@@ -78,7 +94,8 @@ public final class TaskEngineImpl implements TaskEngine {
         @NonNull Duration recoveryInterval,
         int claimBatchSize,
         @NonNull String engineId,
-        @NonNull Map<TaskType, TaskDefinition<?>> definitions
+        @NonNull Map<TaskType, TaskDefinition<?>> definitions,
+        @Nullable TaskEventStore eventStore
     ) {
         this.store = Objects.requireNonNull(store, "store");
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
@@ -90,6 +107,13 @@ public final class TaskEngineImpl implements TaskEngine {
         this.claimBatchSize = claimBatchSize;
         this.engineId = Objects.requireNonNull(engineId, "engineId");
         this.definitions = Map.copyOf(definitions);
+        this.eventStore = eventStore;
+        this.transactionalEventStore = eventStore instanceof TaskEventTransactionalStore
+            ? (TaskEventTransactionalStore) eventStore
+            : null;
+        this.sharedEventStore = eventStore != null
+            && eventStore == store
+            && eventStore instanceof TaskEventTransactionalStore;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder()
                 .setNameFormat("task-engine-scheduler-%d")
@@ -249,7 +273,7 @@ public final class TaskEngineImpl implements TaskEngine {
                 null
             );
 
-            store.update(completed);
+            completeWithEvent(completed);
             return;
         }
 
@@ -317,7 +341,7 @@ public final class TaskEngineImpl implements TaskEngine {
                 null
             );
 
-            store.update(completed);
+            completeWithEvent(completed);
             return;
         }
 
@@ -450,16 +474,30 @@ public final class TaskEngineImpl implements TaskEngine {
         );
 
         try {
-            TaskRecord created = store.create(record, request.links());
-            TaskSnapshot snapshot = toSnapshot(created, loadLinks(created.id()));
+            return withSharedTransaction(() -> {
+                TaskRecord created = store.create(record, request.links());
+                recordRequestContext(created, payload, now);
+                TaskSnapshot snapshot = toSnapshot(created, loadLinks(created.id()));
 
-            return new TaskSubmissionResult(snapshot, TaskSubmissionStatus.CREATED);
+                return new TaskSubmissionResult(snapshot, TaskSubmissionStatus.CREATED);
+            });
         } catch (TaskDuplicateException ex) {
             return updateDuplicate(request, definition);
         }
     }
 
     private <C> TaskSubmissionResult updateDuplicate(
+        @NonNull TaskRequest<C> request,
+        @NonNull TaskDefinition<C> definition
+    ) {
+        if (sharedEventStore && transactionalEventStore != null) {
+            return transactionalEventStore.inTransaction(() -> updateDuplicateInternal(request, definition));
+        }
+
+        return updateDuplicateInternal(request, definition);
+    }
+
+    private <C> TaskSubmissionResult updateDuplicateInternal(
         @NonNull TaskRequest<C> request,
         @NonNull TaskDefinition<C> definition
     ) {
@@ -475,6 +513,27 @@ public final class TaskEngineImpl implements TaskEngine {
 
         TaskSnapshot snapshot = toSnapshot(updated, loadLinks(updated.id()));
         TaskSubmissionStatus status = tracker.changed ? TaskSubmissionStatus.UPDATED : TaskSubmissionStatus.DUPLICATE;
+
+        TaskPayload duplicatePayload = null;
+        if (eventStore != null) {
+            duplicatePayload = definition.contextCodec().encode(request.context());
+        }
+
+        if (eventStore != null && duplicatePayload != null) {
+            TaskPayload payload = duplicatePayload;
+            Runnable eventOps = () -> {
+                recordDuplicateContext(updated, payload, now);
+                if (shouldEmitLateEvent(updated, definition)) {
+                    emitCompletionEvent(updated, now);
+                }
+            };
+
+            if (sharedEventStore) {
+                eventOps.run();
+            } else {
+                runEventTransaction(eventOps);
+            }
+        }
 
         return new TaskSubmissionResult(snapshot, status);
     }
@@ -496,10 +555,16 @@ public final class TaskEngineImpl implements TaskEngine {
             throw new TaskStateException(reason);
         }
 
-        TaskContextCodec<C> codec = definition.contextCodec();
-        C existingContext = codec.decode(existing.payload());
-        C merged = definition.contextMerger().merge(existingContext, request.context());
-        TaskPayload newPayload = codec.encode(merged);
+        boolean canMergeContext = existing.status() == TaskStatus.PENDING
+            || existing.status() == TaskStatus.WAITING_RETRY;
+
+        TaskPayload newPayload = existing.payload();
+        if (canMergeContext) {
+            TaskContextCodec<C> codec = definition.contextCodec();
+            C existingContext = codec.decode(existing.payload());
+            C merged = definition.contextMerger().merge(existingContext, request.context());
+            newPayload = codec.encode(merged);
+        }
 
         return new TaskRecord(
             existing.id(),
@@ -623,6 +688,173 @@ public final class TaskEngineImpl implements TaskEngine {
         }
 
         return !Arrays.equals(existing.payload().data(), updated.payload().data());
+    }
+
+    private void completeWithEvent(
+        @NonNull TaskRecord completed
+    ) {
+        Objects.requireNonNull(completed, "completed");
+
+        if (sharedEventStore && transactionalEventStore != null) {
+            transactionalEventStore.inTransaction(() -> {
+                store.update(completed);
+                emitCompletionEvent(completed, completed.updatedAt());
+                return null;
+            });
+            return;
+        }
+
+        store.update(completed);
+        emitCompletionEvent(completed, completed.updatedAt());
+    }
+
+    private void emitCompletionEvent(
+        @NonNull TaskRecord terminalRecord,
+        @NonNull Instant now
+    ) {
+        if (eventStore == null) {
+            return;
+        }
+        if (store.hasDependents(terminalRecord.id())) {
+            return;
+        }
+
+        List<TaskRecord> chainRecords = loadChainRecords(terminalRecord);
+        List<TaskEventContextEntry> contexts = new ArrayList<>();
+        for (TaskRecord record : chainRecords) {
+            if (!shouldIncludeChainContext(record, terminalRecord)) {
+                continue;
+            }
+            contexts.add(new TaskEventContextEntry(
+                record.id(),
+                record.type(),
+                TaskEventContextKind.CHAIN,
+                record.payload(),
+                now
+            ));
+        }
+
+        List<TaskId> chainTaskIds = new ArrayList<>();
+        for (TaskRecord record : chainRecords) {
+            chainTaskIds.add(record.id());
+        }
+
+        TaskEventRecord event = new TaskEventRecord(
+            TaskEventId.random(),
+            terminalRecord.id(),
+            terminalRecord.key(),
+            terminalRecord.type(),
+            TaskEventType.CHAIN_COMPLETED,
+            now
+        );
+
+        eventStore.createEvent(event, contexts, chainTaskIds);
+    }
+
+    private @NonNull List<TaskRecord> loadChainRecords(
+        @NonNull TaskRecord terminalRecord
+    ) {
+        Map<TaskId, TaskRecord> records = new LinkedHashMap<>();
+        Deque<TaskId> queue = new ArrayDeque<>();
+
+        records.put(terminalRecord.id(), terminalRecord);
+        queue.add(terminalRecord.id());
+
+        while (!queue.isEmpty()) {
+            TaskId current = queue.removeFirst();
+            List<TaskLink> links = store.findLinks(current);
+            for (TaskLink link : links) {
+                if (link.type() != TaskLinkType.DEPENDS_ON) {
+                    continue;
+                }
+                TaskId dependencyId = link.targetId();
+                if (records.containsKey(dependencyId)) {
+                    continue;
+                }
+
+                TaskRecord dependency = store.findById(dependencyId);
+                if (dependency == null) {
+                    continue;
+                }
+
+                records.put(dependencyId, dependency);
+                queue.add(dependencyId);
+            }
+        }
+
+        return List.copyOf(records.values());
+    }
+
+    private boolean shouldIncludeChainContext(
+        @NonNull TaskRecord record,
+        @NonNull TaskRecord terminalRecord
+    ) {
+        if (record.id().equals(terminalRecord.id())) {
+            return true;
+        }
+
+        TaskDefinition<?> definition = definitions.get(record.type());
+        return definition != null && definition.contributesToChainContext();
+    }
+
+    private void recordRequestContext(
+        @NonNull TaskRecord record,
+        @NonNull TaskPayload payload,
+        @NonNull Instant now
+    ) {
+        if (eventStore == null) {
+            return;
+        }
+
+        eventStore.recordRequestContext(record.id(), record.type(), payload, now);
+    }
+
+    private void recordDuplicateContext(
+        @NonNull TaskRecord record,
+        @NonNull TaskPayload payload,
+        @NonNull Instant now
+    ) {
+        if (eventStore == null) {
+            return;
+        }
+
+        eventStore.recordDuplicateContext(record.id(), record.type(), payload, now);
+    }
+
+    private <C> boolean shouldEmitLateEvent(
+        @NonNull TaskRecord record,
+        @NonNull TaskDefinition<C> definition
+    ) {
+        return record.status() == TaskStatus.COMPLETED
+            && definition.stateMachine().isTerminal(record.state());
+    }
+
+    private void runEventTransaction(
+        @NonNull Runnable action
+    ) {
+        Objects.requireNonNull(action, "action");
+
+        if (transactionalEventStore == null) {
+            action.run();
+            return;
+        }
+
+        transactionalEventStore.inTransaction(() -> {
+            action.run();
+            return null;
+        });
+    }
+
+    private <T> T withSharedTransaction(
+        @NonNull Supplier<T> action
+    ) {
+        Objects.requireNonNull(action, "action");
+
+        if (sharedEventStore && transactionalEventStore != null) {
+            return transactionalEventStore.inTransaction(action);
+        }
+
+        return action.get();
     }
 
     private static final class UpdateTracker {

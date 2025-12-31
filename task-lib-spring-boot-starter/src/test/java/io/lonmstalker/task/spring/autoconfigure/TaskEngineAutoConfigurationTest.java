@@ -10,6 +10,7 @@ import io.lonmstalker.task.api.error.TaskStoreException;
 import io.lonmstalker.task.api.model.TaskId;
 import io.lonmstalker.task.api.model.TaskKey;
 import io.lonmstalker.task.api.model.TaskLink;
+import io.lonmstalker.task.api.model.TaskLinkType;
 import io.lonmstalker.task.api.model.TaskPayload;
 import io.lonmstalker.task.api.model.TaskResult;
 import io.lonmstalker.task.api.model.TaskState;
@@ -545,6 +546,11 @@ class TaskEngineAutoConfigurationTest {
         }
 
         @Override
+        public boolean hasDependents(TaskId id) {
+            return false;
+        }
+
+        @Override
         public void resetExpiredLeases(Instant now) {
         }
 
@@ -665,6 +671,21 @@ class TaskEngineAutoConfigurationTest {
                 return List.of();
             }
             return List.copyOf(found);
+        }
+
+        @Override
+        public boolean hasDependents(TaskId id) {
+            Objects.requireNonNull(id, "id");
+
+            for (List<TaskLink> taskLinks : links.values()) {
+                for (TaskLink link : taskLinks) {
+                    if (link.type() == TaskLinkType.DEPENDS_ON && link.targetId().equals(id)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         @Override

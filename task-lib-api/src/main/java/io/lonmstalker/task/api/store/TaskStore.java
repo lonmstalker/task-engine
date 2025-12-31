@@ -98,6 +98,17 @@ public interface TaskStore extends AutoCloseable {
     );
 
     /**
+     * Checks whether any task depends on the given task.
+     *
+     * @param id task id
+     * @return true if there is a dependent task
+     */
+    @Blocking
+    boolean hasDependents(
+        @NonNull TaskId id
+    );
+
+    /**
      * Resets expired leases to make tasks runnable again.
      *
      * @param now current time

@@ -17,6 +17,7 @@ public final class TaskDefinition<C> {
     private final @NonNull TaskContextMerger<C> contextMerger;
     private final @NonNull TaskStateMachine stateMachine;
     private final @NonNull RetryPolicy retryPolicy;
+    private final boolean contributesToChainContext;
 
     private TaskDefinition(
         @NonNull Builder<C> builder
@@ -27,6 +28,7 @@ public final class TaskDefinition<C> {
         this.contextMerger = Objects.requireNonNull(builder.contextMerger, "contextMerger");
         this.stateMachine = Objects.requireNonNull(builder.stateMachine, "stateMachine");
         this.retryPolicy = Objects.requireNonNull(builder.retryPolicy, "retryPolicy");
+        this.contributesToChainContext = builder.contributesToChainContext;
     }
 
     public static <C> @NonNull Builder<C> builder() {
@@ -87,6 +89,15 @@ public final class TaskDefinition<C> {
         return retryPolicy;
     }
 
+    /**
+     * Returns whether task context contributes to chain context aggregation.
+     *
+     * @return true if task context should be included
+     */
+    public boolean contributesToChainContext() {
+        return contributesToChainContext;
+    }
+
     public static final class Builder<C> {
         private @Nullable TaskType type;
         private @Nullable TaskHandler<C> handler;
@@ -94,6 +105,7 @@ public final class TaskDefinition<C> {
         private @Nullable TaskContextMerger<C> contextMerger;
         private @Nullable TaskStateMachine stateMachine;
         private @Nullable RetryPolicy retryPolicy;
+        private boolean contributesToChainContext;
 
         private Builder() {
         }
@@ -173,6 +185,19 @@ public final class TaskDefinition<C> {
             @NonNull RetryPolicy retryPolicy
         ) {
             this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy");
+            return this;
+        }
+
+        /**
+         * Sets whether task context contributes to chain aggregation.
+         *
+         * @param contributesToChainContext true to include context in chain events
+         * @return builder
+         */
+        public @NonNull Builder<C> contributesToChainContext(
+            boolean contributesToChainContext
+        ) {
+            this.contributesToChainContext = contributesToChainContext;
             return this;
         }
 

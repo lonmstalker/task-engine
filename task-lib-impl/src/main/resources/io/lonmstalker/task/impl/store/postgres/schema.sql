@@ -32,3 +32,36 @@ CREATE TABLE IF NOT EXISTS task_links (
 
 CREATE INDEX IF NOT EXISTS task_links_linked_idx
     ON task_links (linked_task_id);
+
+CREATE TABLE IF NOT EXISTS task_event_outbox (
+    id UUID PRIMARY KEY,
+    task_id UUID NOT NULL REFERENCES task_tasks(id) ON DELETE CASCADE,
+    task_key VARCHAR(255) NOT NULL,
+    task_type VARCHAR(255) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS task_event_outbox_task_idx
+    ON task_event_outbox (task_id, created_at);
+
+CREATE TABLE IF NOT EXISTS task_event_contexts (
+    id BIGSERIAL PRIMARY KEY,
+    event_id UUID NULL REFERENCES task_event_outbox(id) ON DELETE CASCADE,
+    task_id UUID NOT NULL REFERENCES task_tasks(id) ON DELETE CASCADE,
+    task_type VARCHAR(255) NOT NULL,
+    context_kind VARCHAR(32) NOT NULL,
+    payload BYTEA NOT NULL,
+    payload_content_type VARCHAR(128) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS task_event_contexts_event_idx
+    ON task_event_contexts (event_id);
+
+CREATE INDEX IF NOT EXISTS task_event_contexts_task_idx
+    ON task_event_contexts (task_id, event_id);
+
+CREATE INDEX IF NOT EXISTS task_event_contexts_pending_idx
+    ON task_event_contexts (task_id)
+    WHERE event_id IS NULL;

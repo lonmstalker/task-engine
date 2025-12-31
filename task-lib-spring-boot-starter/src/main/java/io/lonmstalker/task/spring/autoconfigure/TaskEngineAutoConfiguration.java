@@ -3,6 +3,7 @@ package io.lonmstalker.task.spring.autoconfigure;
 import io.lonmstalker.task.api.TaskDefinition;
 import io.lonmstalker.task.api.TaskDispatcher;
 import io.lonmstalker.task.api.TaskEngine;
+import io.lonmstalker.task.api.event.TaskEventStore;
 import io.lonmstalker.task.api.store.TaskStore;
 import io.lonmstalker.task.impl.engine.TaskEngineBuilder;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -49,6 +50,7 @@ public class TaskEngineAutoConfiguration {
         TaskDispatcher dispatcher,
         ObjectProvider<Clock> clockProvider,
         ObjectProvider<TaskDefinition<?>> definitionsProvider,
+        ObjectProvider<TaskEventStore> eventStoreProvider,
         TaskEngineProperties properties
     ) {
         Objects.requireNonNull(store, "store");
@@ -65,6 +67,11 @@ public class TaskEngineAutoConfiguration {
             .leaseDuration(properties.getLeaseDuration())
             .recoveryInterval(properties.getRecoveryInterval())
             .claimBatchSize(properties.getClaimBatchSize());
+
+        TaskEventStore eventStore = eventStoreProvider.getIfAvailable();
+        if (eventStore != null) {
+            builder.eventStore(eventStore);
+        }
 
         String engineId = properties.getEngineId();
         if (engineId != null && !engineId.isBlank()) {

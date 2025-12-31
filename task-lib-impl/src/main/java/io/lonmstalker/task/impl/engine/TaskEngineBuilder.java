@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import io.lonmstalker.task.api.TaskDefinition;
 import io.lonmstalker.task.api.TaskDispatcher;
 import io.lonmstalker.task.api.TaskEngine;
+import io.lonmstalker.task.api.event.TaskEventStore;
 import io.lonmstalker.task.api.store.TaskStore;
 import io.lonmstalker.task.impl.dispatcher.ExecutorTaskDispatcher;
 import java.time.Clock;
@@ -27,6 +28,7 @@ public final class TaskEngineBuilder {
     private static final int DEFAULT_CLAIM_BATCH_SIZE = 100;
 
     private @Nullable TaskStore store;
+    private @Nullable TaskEventStore eventStore;
     private @Nullable TaskDispatcher dispatcher;
     private @NonNull Clock clock = Clock.systemUTC();
     private @NonNull Duration pollInterval = DEFAULT_POLL_INTERVAL;
@@ -54,6 +56,13 @@ public final class TaskEngineBuilder {
         @NonNull TaskDispatcher dispatcher
     ) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        return this;
+    }
+
+    public @NonNull TaskEngineBuilder eventStore(
+        @NonNull TaskEventStore eventStore
+    ) {
+        this.eventStore = Objects.requireNonNull(eventStore, "eventStore");
         return this;
     }
 
@@ -122,6 +131,11 @@ public final class TaskEngineBuilder {
             );
         }
 
+        TaskEventStore resolvedEventStore = eventStore;
+        if (resolvedEventStore == null && store instanceof TaskEventStore) {
+            resolvedEventStore = (TaskEventStore) store;
+        }
+
         return new TaskEngineImpl(
             store,
             dispatcher,
@@ -131,7 +145,8 @@ public final class TaskEngineBuilder {
             recoveryInterval,
             claimBatchSize,
             engineId,
-            Map.copyOf(definitions)
+            Map.copyOf(definitions),
+            resolvedEventStore
         );
     }
 }
