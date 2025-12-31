@@ -4,7 +4,9 @@ import io.lonmstalker.task.api.TaskContextCodec;
 import io.lonmstalker.task.api.TaskDefinition;
 import io.lonmstalker.task.api.error.TaskDuplicateException;
 import io.lonmstalker.task.api.error.TaskStateException;
+import io.lonmstalker.task.api.model.TaskErrorInfo;
 import io.lonmstalker.task.api.model.TaskId;
+import io.lonmstalker.task.api.model.TaskLink;
 import io.lonmstalker.task.api.model.TaskPayload;
 import io.lonmstalker.task.api.model.TaskRequest;
 import io.lonmstalker.task.api.model.TaskSnapshot;
@@ -17,12 +19,15 @@ import io.lonmstalker.task.api.state.TaskStateUpdateAction;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskRecordUpdater;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskDependencyStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 final class TaskSubmissionService {
 
@@ -55,22 +60,25 @@ final class TaskSubmissionService {
         TaskState initial = definition.stateMachine().initialState();
         TaskState resolvedState = resolveInitialState(definition, initial, request.state());
         TaskPayload payload = definition.contextCodec().encode(request.context());
+        TaskErrorInfo dependencyError = resolveDependencyError(request.links());
+        TaskStatus initialStatus = dependencyError == null ? TaskStatus.PENDING : TaskStatus.CANCELLED;
+        Instant nextRunAt = dependencyError == null ? now : null;
 
         TaskRecord record = new TaskRecord(
             TaskId.random(),
             request.key(),
             request.type(),
             resolvedState,
-            TaskStatus.PENDING,
+            initialStatus,
             0,
             definition.retryPolicy().maxAttempts(),
-            now,
+            nextRunAt,
             null,
             null,
             payload,
             now,
             now,
-            null
+            dependencyError
         );
 
         try {
@@ -106,12 +114,17 @@ final class TaskSubmissionService {
             return merged;
         }, request.links());
 
-        TaskSnapshot snapshot = snapshotMapper.toSnapshot(updated);
+        TaskRecord finalized = cancelOnFailedDependencies(updated, request.links(), now);
+        if (!finalized.equals(updated)) {
+            tracker.changed = true;
+        }
+
+        TaskSnapshot snapshot = snapshotMapper.toSnapshot(finalized);
         TaskSubmissionStatus status = tracker.changed ? TaskSubmissionStatus.UPDATED : TaskSubmissionStatus.DUPLICATE;
 
         if (eventPublisher.isEnabled()) {
             TaskPayload payload = definition.contextCodec().encode(request.context());
-            eventPublisher.onDuplicate(updated, payload, now, definition);
+            eventPublisher.onDuplicate(finalized, payload, now, definition);
         }
 
         return new TaskSubmissionResult(snapshot, status);
@@ -198,6 +211,79 @@ final class TaskSubmissionService {
 
     private @NonNull Instant now() {
         return Instant.now(clock);
+    }
+
+    private @Nullable TaskErrorInfo resolveDependencyError(
+        @NonNull List<TaskLink> links
+    ) {
+        if (!(store instanceof TaskDependencyStore dependencyStore)) {
+            return null;
+        }
+
+        List<TaskId> failed = dependencyStore.findFailedDependencies(links);
+        if (failed.isEmpty()) {
+            return null;
+        }
+
+        return new TaskErrorInfo("DependencyFailed", formatDependencyReason(failed));
+    }
+
+    private @NonNull TaskRecord cancelOnFailedDependencies(
+        @NonNull TaskRecord record,
+        @NonNull List<TaskLink> links,
+        @NonNull Instant now
+    ) {
+        if (!(store instanceof TaskDependencyStore dependencyStore)) {
+            return record;
+        }
+        if (record.status() != TaskStatus.PENDING && record.status() != TaskStatus.WAITING_RETRY) {
+            return record;
+        }
+
+        List<TaskId> failed = dependencyStore.findFailedDependencies(links);
+        if (failed.isEmpty()) {
+            return record;
+        }
+
+        TaskErrorInfo error = new TaskErrorInfo("DependencyFailed", formatDependencyReason(failed));
+
+        TaskRecord cancelled = new TaskRecord(
+            record.id(),
+            record.key(),
+            record.type(),
+            record.state(),
+            TaskStatus.CANCELLED,
+            record.attempt(),
+            record.maxAttempts(),
+            null,
+            null,
+            null,
+            record.payload(),
+            record.createdAt(),
+            now,
+            error
+        );
+
+        store.update(cancelled);
+        dependencyStore.cancelDependents(cancelled.id(), error, now);
+        return cancelled;
+    }
+
+    private @NonNull String formatDependencyReason(
+        @NonNull List<TaskId> failed
+    ) {
+        StringBuilder builder = new StringBuilder("Dependency failed: ");
+        int limit = Math.min(failed.size(), 5);
+        for (int i = 0; i < limit; i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(failed.get(i).value());
+        }
+        if (failed.size() > limit) {
+            builder.append(" and ").append(failed.size() - limit).append(" more");
+        }
+        return builder.toString();
     }
 
     private static final class UpdateTracker {

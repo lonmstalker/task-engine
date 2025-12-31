@@ -521,4 +521,124 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
         }
     }
 
+    @Test
+    @DisplayName("shouldCancelDependentWhenDependencyFails")
+    void shouldCancelDependentWhenDependencyFails() {
+        PostgresTaskStore store = new PostgresTaskStore(dataSource);
+        TaskContextCodec<String> codec = new IntegrationFixtures.StringCodec();
+
+        TaskDefinition<String> definitionA = TaskDefinition.<String>builder()
+            .type(TaskType.of("dep-fail-root"))
+            .handler(context -> TaskResult.failure(new IntegrationFixtures.RuntimeFailure()))
+            .contextCodec(codec)
+            .contextMerger((existing, incoming) -> existing)
+            .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+            .retryPolicy(RetryPolicies.none())
+            .build();
+
+        TaskDefinition<String> definitionB = TaskDefinition.<String>builder()
+            .type(TaskType.of("dep-fail-child"))
+            .handler(context -> TaskResult.success())
+            .contextCodec(codec)
+            .contextMerger((existing, incoming) -> existing)
+            .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+            .retryPolicy(RetryPolicies.none())
+            .build();
+
+        try (TaskEngine engine = TaskEngineBuilder.builder()
+            .store(store)
+            .dispatcher(new IntegrationFixtures.DirectTaskDispatcher())
+            .registerDefinition(definitionA)
+            .registerDefinition(definitionB)
+            .build()) {
+
+            TaskSubmissionResult parent = engine.submit(new TaskRequest<>(
+                TaskKey.of("dep-fail-root"),
+                definitionA.type(),
+                STATE_NEW,
+                "root",
+                List.of()
+            ));
+
+            TaskLink link = new TaskLink(parent.snapshot().id(), TaskLinkType.DEPENDS_ON);
+            TaskSubmissionResult child = engine.submit(new TaskRequest<>(
+                TaskKey.of("dep-fail-child"),
+                definitionB.type(),
+                STATE_NEW,
+                "child",
+                List.of(link)
+            ));
+
+            IntegrationTestSupport.pollOnce(engine);
+
+            TaskSnapshot parentSnapshot = engine.findByKey(parent.snapshot().key());
+            TaskSnapshot childSnapshot = engine.findByKey(child.snapshot().key());
+
+            assertThat(parentSnapshot).isNotNull();
+            assertThat(parentSnapshot.status()).isEqualTo(TaskStatus.FAILED);
+            assertThat(childSnapshot).isNotNull();
+            assertThat(childSnapshot.status()).isEqualTo(TaskStatus.CANCELLED);
+        }
+    }
+
+    @Test
+    @DisplayName("shouldCancelTaskWhenDependencyAlreadyFailed")
+    void shouldCancelTaskWhenDependencyAlreadyFailed() {
+        PostgresTaskStore store = new PostgresTaskStore(dataSource);
+        TaskContextCodec<String> codec = new IntegrationFixtures.StringCodec();
+
+        TaskDefinition<String> definitionA = TaskDefinition.<String>builder()
+            .type(TaskType.of("dep-fail-existing"))
+            .handler(context -> TaskResult.failure(new IntegrationFixtures.RuntimeFailure()))
+            .contextCodec(codec)
+            .contextMerger((existing, incoming) -> existing)
+            .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+            .retryPolicy(RetryPolicies.none())
+            .build();
+
+        TaskDefinition<String> definitionB = TaskDefinition.<String>builder()
+            .type(TaskType.of("dep-fail-late-child"))
+            .handler(context -> TaskResult.success())
+            .contextCodec(codec)
+            .contextMerger((existing, incoming) -> existing)
+            .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+            .retryPolicy(RetryPolicies.none())
+            .build();
+
+        try (TaskEngine engine = TaskEngineBuilder.builder()
+            .store(store)
+            .dispatcher(new IntegrationFixtures.DirectTaskDispatcher())
+            .registerDefinition(definitionA)
+            .registerDefinition(definitionB)
+            .build()) {
+
+            TaskSubmissionResult parent = engine.submit(new TaskRequest<>(
+                TaskKey.of("dep-fail-existing"),
+                definitionA.type(),
+                STATE_NEW,
+                "root",
+                List.of()
+            ));
+
+            IntegrationTestSupport.pollOnce(engine);
+
+            TaskSnapshot parentSnapshot = engine.findByKey(parent.snapshot().key());
+            assertThat(parentSnapshot).isNotNull();
+            assertThat(parentSnapshot.status()).isEqualTo(TaskStatus.FAILED);
+
+            TaskLink link = new TaskLink(parentSnapshot.id(), TaskLinkType.DEPENDS_ON);
+            TaskSubmissionResult child = engine.submit(new TaskRequest<>(
+                TaskKey.of("dep-fail-late-child"),
+                definitionB.type(),
+                STATE_NEW,
+                "child",
+                List.of(link)
+            ));
+
+            TaskSnapshot childSnapshot = engine.findByKey(child.snapshot().key());
+            assertThat(childSnapshot).isNotNull();
+            assertThat(childSnapshot.status()).isEqualTo(TaskStatus.CANCELLED);
+        }
+    }
+
 }

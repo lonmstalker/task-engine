@@ -80,7 +80,9 @@ class KafkaTaskEventPublisherIntegrationTest extends KafkaPostgresIntegrationTes
             "publisher",
             Duration.ofSeconds(30),
             10,
-            Duration.ofSeconds(5)
+            Duration.ofSeconds(5),
+            Duration.ofSeconds(5),
+            10
         );
 
         try (KafkaProducer<String, byte[]> producer = KafkaTestSupport.createProducer(KAFKA.getBootstrapServers());
@@ -133,7 +135,9 @@ class KafkaTaskEventPublisherIntegrationTest extends KafkaPostgresIntegrationTes
             "publisher",
             Duration.ofSeconds(30),
             10,
-            Duration.ofSeconds(5)
+            Duration.ofSeconds(5),
+            Duration.ofSeconds(5),
+            10
         );
 
         try (KafkaProducer<String, byte[]> producer = KafkaTestSupport.createProducer(KAFKA.getBootstrapServers());
@@ -189,7 +193,9 @@ class KafkaTaskEventPublisherIntegrationTest extends KafkaPostgresIntegrationTes
             "publisher",
             Duration.ofSeconds(30),
             10,
-            Duration.ofSeconds(5)
+            Duration.ofSeconds(5),
+            Duration.ofSeconds(5),
+            10
         );
 
         try (KafkaProducer<String, byte[]> producer = KafkaTestSupport.createProducer(KAFKA.getBootstrapServers());
@@ -199,7 +205,8 @@ class KafkaTaskEventPublisherIntegrationTest extends KafkaPostgresIntegrationTes
             assertThat(published).isZero();
         }
 
-        TaskEventOutboxClaim retry = new TaskEventOutboxClaim(Instant.now(), Duration.ofSeconds(30), 10, "retry");
+        Instant retryAt = Instant.now().plus(config.failureBackoff()).plusSeconds(1);
+        TaskEventOutboxClaim retry = new TaskEventOutboxClaim(retryAt, Duration.ofSeconds(30), 10, "retry");
         List<TaskEventRecord> claimed = outboxStore.claim(retry);
         assertThat(claimed).hasSize(1);
         assertThat(claimed.get(0).id()).isEqualTo(event.id());

@@ -13,8 +13,10 @@ import io.lonmstalker.task.api.model.TaskResult.Success;
 import io.lonmstalker.task.api.model.TaskSnapshot;
 import io.lonmstalker.task.api.model.TaskState;
 import io.lonmstalker.task.api.model.TaskStatus;
+import io.lonmstalker.task.api.store.TaskLeaseStore;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskDependencyStore;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -78,7 +80,7 @@ final class TaskProcessingService {
                 null
             );
 
-            finalizeWithEvent(completed, definition);
+            finalizeWithEvent(completed, record, definition);
             return;
         }
 
@@ -159,7 +161,7 @@ final class TaskProcessingService {
                 null
             );
 
-            finalizeWithEvent(completed, definition);
+            finalizeWithEvent(completed, record, definition);
             return;
         }
 
@@ -180,7 +182,7 @@ final class TaskProcessingService {
             null
         );
 
-        store.update(updated);
+        updateWithLease(updated, record, now);
     }
 
     private <C> void handleFailure(
@@ -215,7 +217,7 @@ final class TaskProcessingService {
                 errorInfo
             );
 
-            store.update(rescheduled);
+            updateWithLease(rescheduled, record, now);
             return;
         }
 
@@ -236,7 +238,7 @@ final class TaskProcessingService {
             errorInfo
         );
 
-        finalizeWithEvent(failed, definition);
+        finalizeWithEvent(failed, record, definition);
     }
 
     private <C> TaskState resolveNextState(
@@ -259,15 +261,52 @@ final class TaskProcessingService {
 
     private void finalizeWithEvent(
         @NonNull TaskRecord record,
+        @NonNull TaskRecord source,
         @NonNull TaskDefinition<?> definition
     ) {
         Instant now = record.updatedAt();
 
-        eventPublisher.inSharedTransaction(() -> {
-            store.update(record);
+        boolean updated = eventPublisher.inSharedTransaction(() -> {
+            boolean ok = updateWithLease(record, source, now);
+            if (!ok) {
+                return false;
+            }
+            if (record.status() == TaskStatus.FAILED && store instanceof TaskDependencyStore dependencyStore) {
+                TaskErrorInfo error = Optional.ofNullable(record.lastError())
+                    .orElseGet(() -> new TaskErrorInfo("TaskFailed", "Task failed"));
+                dependencyStore.cancelDependents(record.id(), error, now);
+            }
             eventPublisher.onFinalized(record, definition, now);
-            return null;
+            return true;
         });
+
+        if (!updated) {
+            log.warn("Skip finalization for task {} due to lease mismatch", record.id().value());
+        }
+    }
+
+    private boolean updateWithLease(
+        @NonNull TaskRecord updated,
+        @NonNull TaskRecord source,
+        @NonNull Instant now
+    ) {
+        if (store instanceof TaskLeaseStore leaseStore
+            && source.leaseOwner() != null
+            && source.leaseUntil() != null) {
+            boolean updatedOk = leaseStore.updateIfLeased(
+                updated,
+                source.leaseOwner(),
+                source.leaseUntil(),
+                now
+            );
+            if (!updatedOk) {
+                log.warn("Lease mismatch for task {}, skipping update", source.id().value());
+            }
+            return updatedOk;
+        }
+
+        store.update(updated);
+        return true;
     }
 
     private @NonNull Instant now() {

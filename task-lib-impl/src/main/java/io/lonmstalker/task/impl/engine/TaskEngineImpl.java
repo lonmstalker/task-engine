@@ -6,6 +6,7 @@ import io.lonmstalker.task.api.TaskDefinition;
 import io.lonmstalker.task.api.TaskDispatcher;
 import io.lonmstalker.task.api.TaskEngine;
 import io.lonmstalker.task.api.error.TaskConfigException;
+import io.lonmstalker.task.api.model.TaskErrorInfo;
 import io.lonmstalker.task.api.model.TaskId;
 import io.lonmstalker.task.api.model.TaskKey;
 import io.lonmstalker.task.api.model.TaskRequest;
@@ -15,6 +16,7 @@ import io.lonmstalker.task.api.model.TaskType;
 import io.lonmstalker.task.api.store.TaskClaim;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.impl.store.TaskDependencyStore;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -28,12 +30,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import net.jcip.annotations.ThreadSafe;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Default task engine implementation.
  */
 @ThreadSafe
 public final class TaskEngineImpl implements TaskEngine {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskEngineImpl.class);
 
     private final @NonNull TaskStore store;
     private final @NonNull TaskDispatcher dispatcher;
@@ -93,14 +99,14 @@ public final class TaskEngineImpl implements TaskEngine {
         }
 
         scheduler.scheduleAtFixedRate(
-            this::pollOnce,
+            () -> safeRun("poll", this::pollOnce),
             0,
             pollInterval.toMillis(),
             TimeUnit.MILLISECONDS
         );
 
         scheduler.scheduleAtFixedRate(
-            this::recoverExpiredLeases,
+            () -> safeRun("recovery", this::recoverExpiredLeases),
             recoveryInterval.toMillis(),
             recoveryInterval.toMillis(),
             TimeUnit.MILLISECONDS
@@ -191,7 +197,7 @@ public final class TaskEngineImpl implements TaskEngine {
 
         for (TaskRecord record : claimed) {
             TaskDefinition<?> definition = definitionFor(record.type());
-            dispatcher.dispatch(() -> processingService.process(record, definition));
+            dispatcher.dispatch(() -> safeProcess(record, definition));
         }
     }
 
@@ -200,7 +206,14 @@ public final class TaskEngineImpl implements TaskEngine {
             return;
         }
 
-        store.resetExpiredLeases(now());
+        Instant now = now();
+        store.resetExpiredLeases(now);
+        if (store instanceof TaskDependencyStore dependencyStore) {
+            dependencyStore.cancelBlockedByFailedDependencies(
+                new TaskErrorInfo("DependencyFailed", "Dependency failed"),
+                now
+            );
+        }
     }
 
     // ───────────────────────────────────────────────────
@@ -222,5 +235,27 @@ public final class TaskEngineImpl implements TaskEngine {
 
     private @NonNull Instant now() {
         return Instant.now(clock);
+    }
+
+    private void safeRun(
+        @NonNull String name,
+        @NonNull Runnable action
+    ) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            LOGGER.error("Task engine {} loop failed", name, e);
+        }
+    }
+
+    private void safeProcess(
+        @NonNull TaskRecord record,
+        @NonNull TaskDefinition<?> definition
+    ) {
+        try {
+            processingService.process(record, definition);
+        } catch (RuntimeException e) {
+            LOGGER.error("Task processing failed for {}", record.id().value(), e);
+        }
     }
 }

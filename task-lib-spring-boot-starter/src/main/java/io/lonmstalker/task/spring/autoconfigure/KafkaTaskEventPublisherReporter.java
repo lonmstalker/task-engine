@@ -43,13 +43,16 @@ final class KafkaTaskEventPublisherReporter implements SmartInitializingSingleto
 
         logger.info(
             "Kafka task event publisher configured: type={}, topic={}, batchSize={}, pollInterval={}, leaseDuration={}, "
-                + "publishTimeout={}, autoStart={}, threadNameFormat={}, bootstrapServers={}, producerPropertiesKeys={}",
+                + "publishTimeout={}, failureBackoff={}, maxPublishAttempts={}, autoStart={}, threadNameFormat={}, "
+                + "bootstrapServers={}, producerPropertiesKeys={}",
             publisher.getClass().getName(),
             properties.getTopic(),
             properties.getBatchSize(),
             properties.getPollInterval(),
             properties.getLeaseDuration(),
             properties.getPublishTimeout(),
+            properties.getFailureBackoff(),
+            properties.getMaxPublishAttempts(),
             properties.isAutoStart(),
             properties.getThreadNameFormat(),
             bootstrapServers,
@@ -78,6 +81,12 @@ final class KafkaTaskEventPublisherReporter implements SmartInitializingSingleto
             .register(registry);
         Gauge.builder("task.kafka.publisher.publish_timeout_ms", properties, p -> p.getPublishTimeout().toMillis())
             .description("Configured Kafka publisher publish timeout in milliseconds")
+            .register(registry);
+        Gauge.builder("task.kafka.publisher.failure_backoff_ms", properties, p -> p.getFailureBackoff().toMillis())
+            .description("Configured Kafka publisher failure backoff in milliseconds")
+            .register(registry);
+        Gauge.builder("task.kafka.publisher.max_publish_attempts", properties, TaskKafkaProperties::getMaxPublishAttempts)
+            .description("Configured Kafka publisher max publish attempts")
             .register(registry);
     }
 }

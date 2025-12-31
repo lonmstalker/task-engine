@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS task_event_outbox (
     lease_owner VARCHAR(128) NULL,
     lease_until TIMESTAMPTZ NULL,
     published_at TIMESTAMPTZ NULL,
-    publish_attempts INTEGER NOT NULL DEFAULT 0
+    publish_attempts INTEGER NOT NULL DEFAULT 0,
+    dead_letter_at TIMESTAMPTZ NULL,
+    dead_letter_reason TEXT NULL
 );
 
 CREATE INDEX IF NOT EXISTS task_event_outbox_task_idx
@@ -59,6 +61,10 @@ CREATE INDEX IF NOT EXISTS task_event_outbox_task_idx
 CREATE INDEX IF NOT EXISTS task_event_outbox_pending_idx
     ON task_event_outbox (lease_until, created_at)
     WHERE published_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS task_event_outbox_dead_idx
+    ON task_event_outbox (dead_letter_at)
+    WHERE dead_letter_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS task_event_contexts (
     id BIGSERIAL PRIMARY KEY,

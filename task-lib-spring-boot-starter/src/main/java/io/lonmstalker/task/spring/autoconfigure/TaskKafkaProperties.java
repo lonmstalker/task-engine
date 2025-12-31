@@ -15,6 +15,8 @@ public class TaskKafkaProperties {
     private Duration leaseDuration = Duration.ofSeconds(30);
     private int batchSize = 100;
     private Duration publishTimeout = Duration.ofSeconds(30);
+    private Duration failureBackoff = Duration.ofSeconds(5);
+    private int maxPublishAttempts = 10;
     private List<String> bootstrapServers = List.of();
     private Map<String, String> producerProperties = new LinkedHashMap<>();
     private String topic;
@@ -67,6 +69,22 @@ public class TaskKafkaProperties {
 
     public void setPublishTimeout(Duration publishTimeout) {
         this.publishTimeout = publishTimeout;
+    }
+
+    public Duration getFailureBackoff() {
+        return failureBackoff;
+    }
+
+    public void setFailureBackoff(Duration failureBackoff) {
+        this.failureBackoff = failureBackoff;
+    }
+
+    public int getMaxPublishAttempts() {
+        return maxPublishAttempts;
+    }
+
+    public void setMaxPublishAttempts(int maxPublishAttempts) {
+        this.maxPublishAttempts = maxPublishAttempts;
     }
 
     public List<String> getBootstrapServers() {

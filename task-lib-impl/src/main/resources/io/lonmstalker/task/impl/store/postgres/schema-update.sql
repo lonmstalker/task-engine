@@ -18,6 +18,16 @@ ALTER TABLE task_event_outbox
 ALTER TABLE task_event_outbox
     ADD COLUMN IF NOT EXISTS publish_attempts INTEGER NOT NULL DEFAULT 0;
 
+ALTER TABLE task_event_outbox
+    ADD COLUMN IF NOT EXISTS dead_letter_at TIMESTAMPTZ NULL;
+
+ALTER TABLE task_event_outbox
+    ADD COLUMN IF NOT EXISTS dead_letter_reason TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS task_event_outbox_pending_idx
     ON task_event_outbox (lease_until, created_at)
     WHERE published_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS task_event_outbox_dead_idx
+    ON task_event_outbox (dead_letter_at)
+    WHERE dead_letter_at IS NOT NULL;

@@ -100,7 +100,9 @@ public class KafkaTaskEventPublisherBenchmark {
                 "bench",
                 Duration.ofSeconds(30),
                 1,
-                Duration.ofSeconds(5)
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(5),
+                10
             );
             publisher = new KafkaTaskEventPublisher(outboxStore, producer, config);
 

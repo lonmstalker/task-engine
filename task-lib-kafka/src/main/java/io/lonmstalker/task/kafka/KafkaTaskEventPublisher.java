@@ -3,6 +3,8 @@ package io.lonmstalker.task.kafka;
 import io.lonmstalker.task.api.event.TaskEventContextEntry;
 import io.lonmstalker.task.api.event.TaskEventId;
 import io.lonmstalker.task.api.event.TaskEventRecord;
+import io.lonmstalker.task.kafka.outbox.TaskEventOutboxAdminStore;
+import io.lonmstalker.task.kafka.outbox.TaskEventOutboxBatchStore;
 import io.lonmstalker.task.kafka.outbox.TaskEventOutboxClaim;
 import io.lonmstalker.task.kafka.outbox.TaskEventOutboxStore;
 import java.time.Clock;
@@ -10,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -40,9 +43,13 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
     private final @NonNull Duration leaseDuration;
     private final int batchSize;
     private final @NonNull Duration publishTimeout;
+    private final @NonNull Duration failureBackoff;
+    private final int maxPublishAttempts;
     private final @NonNull TaskEventMessageCodec messageCodec;
     private final @NonNull TaskEventKeyProvider keyProvider;
     private final @NonNull Clock clock;
+    private final @NonNull TaskEventOutboxAdminStore adminStore;
+    private final @NonNull TaskEventOutboxBatchStore batchStore;
 
     public KafkaTaskEventPublisher(
         @NonNull TaskEventOutboxStore outboxStore,
@@ -57,7 +64,9 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
                 "kafka-publisher-" + UUID.randomUUID(),
                 DEFAULT_LEASE_DURATION,
                 DEFAULT_BATCH_SIZE,
-                DEFAULT_PUBLISH_TIMEOUT
+                DEFAULT_PUBLISH_TIMEOUT,
+                KafkaTaskEventPublisherConfig.DEFAULT_FAILURE_BACKOFF,
+                KafkaTaskEventPublisherConfig.DEFAULT_MAX_PUBLISH_ATTEMPTS
             ),
             new JacksonTaskEventMessageCodec(),
             TaskEventKeyProvider.taskId(),
@@ -96,9 +105,21 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
         this.leaseDuration = config.leaseDuration();
         this.batchSize = config.batchSize();
         this.publishTimeout = config.publishTimeout();
+        this.failureBackoff = config.failureBackoff();
+        this.maxPublishAttempts = config.maxPublishAttempts();
         this.messageCodec = Objects.requireNonNull(messageCodec, "messageCodec");
         this.keyProvider = Objects.requireNonNull(keyProvider, "keyProvider");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.adminStore = outboxStore instanceof TaskEventOutboxAdminStore admin
+            ? admin
+            : new NoopAdminStore();
+        this.batchStore = outboxStore instanceof TaskEventOutboxBatchStore batch
+            ? batch
+            : new NoopBatchStore();
+
+        if (maxPublishAttempts > 0 && !(outboxStore instanceof TaskEventOutboxAdminStore)) {
+            LOGGER.warn("maxPublishAttempts is configured but outbox store does not support attempt tracking");
+        }
     }
 
     public int publishOnce() {
@@ -109,10 +130,20 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
             return 0;
         }
 
+        Map<TaskEventId, List<TaskEventContextEntry>> batchedContexts = batchStore.loadContexts(
+            records.stream().map(TaskEventRecord::id).toList()
+        );
+
         List<PendingPublish> pending = new ArrayList<>(records.size());
         for (TaskEventRecord record : records) {
             try {
-                List<TaskEventContextEntry> contexts = outboxStore.loadContexts(record.id());
+                if (shouldDeadLetter(record.id())) {
+                    continue;
+                }
+                List<TaskEventContextEntry> contexts = batchedContexts.get(record.id());
+                if (contexts == null) {
+                    contexts = outboxStore.loadContexts(record.id());
+                }
                 TaskEventEnvelope envelope = new TaskEventEnvelope(record, contexts);
                 byte[] payload = messageCodec.serialize(envelope);
                 String key = keyProvider.keyFor(record);
@@ -120,7 +151,7 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
                 Future<RecordMetadata> future = producer.send(message);
                 pending.add(new PendingPublish(record.id(), future));
             } catch (RuntimeException e) {
-                release(record.id(), e);
+                handlePublishFailure(record.id(), e);
             }
         }
 
@@ -132,7 +163,7 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
             producer.flush();
         } catch (RuntimeException e) {
             for (PendingPublish entry : pending) {
-                release(entry.eventId(), e);
+                handlePublishFailure(entry.eventId(), e);
             }
             throw e;
         }
@@ -162,19 +193,69 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
             return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            release(pending.eventId(), e);
+            handlePublishFailure(pending.eventId(), e);
         } catch (ExecutionException | TimeoutException e) {
-            release(pending.eventId(), e);
+            handlePublishFailure(pending.eventId(), e);
         }
         return false;
     }
 
-    private void release(
+    private void handlePublishFailure(
         @NonNull TaskEventId eventId,
         @NonNull Exception error
     ) {
         LOGGER.warn("Failed to publish task event {}", eventId.value(), error);
-        outboxStore.release(eventId, leaseOwner, clock.instant());
+
+        if (maxPublishAttempts > 0) {
+            int attempts = adminStore.loadPublishAttempts(eventId);
+            if (attempts >= maxPublishAttempts) {
+                adminStore.markDeadLetter(
+                    eventId,
+                    leaseOwner,
+                    clock.instant(),
+                    "Exceeded max publish attempts: " + attempts + "; lastError=" + sanitizeError(error)
+                );
+                return;
+            }
+        }
+
+        Instant releaseAt = clock.instant().plus(failureBackoff);
+        outboxStore.release(eventId, leaseOwner, releaseAt);
+    }
+
+    private boolean shouldDeadLetter(
+        @NonNull TaskEventId eventId
+    ) {
+        if (maxPublishAttempts <= 0) {
+            return false;
+        }
+
+        int attempts = adminStore.loadPublishAttempts(eventId);
+        if (attempts < maxPublishAttempts) {
+            return false;
+        }
+
+        adminStore.markDeadLetter(
+            eventId,
+            leaseOwner,
+            clock.instant(),
+            "Exceeded max publish attempts: " + attempts
+        );
+        return true;
+    }
+
+    private String sanitizeError(
+        @NonNull Exception error
+    ) {
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) {
+            return error.getClass().getSimpleName();
+        }
+        String sanitized = message.replaceAll("[\r\n]+", " ").trim();
+        if (sanitized.length() > 500) {
+            sanitized = sanitized.substring(0, 500);
+        }
+        return error.getClass().getSimpleName() + ": " + sanitized;
     }
 
     private record PendingPublish(
@@ -185,6 +266,36 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
         private PendingPublish {
             Objects.requireNonNull(eventId, "eventId");
             Objects.requireNonNull(future, "future");
+        }
+    }
+
+    private static final class NoopAdminStore implements TaskEventOutboxAdminStore {
+
+        @Override
+        public int loadPublishAttempts(
+            @NonNull TaskEventId eventId
+        ) {
+            return 0;
+        }
+
+        @Override
+        public void markDeadLetter(
+            @NonNull TaskEventId eventId,
+            @NonNull String leaseOwner,
+            @NonNull Instant deadLetterAt,
+            @NonNull String reason
+        ) {
+            LOGGER.warn("Dead-letter requested but outbox store does not support it for {}", eventId.value());
+        }
+    }
+
+    private static final class NoopBatchStore implements TaskEventOutboxBatchStore {
+
+        @Override
+        public @NonNull Map<TaskEventId, List<TaskEventContextEntry>> loadContexts(
+            @NonNull List<TaskEventId> eventIds
+        ) {
+            return Map.of();
         }
     }
 }

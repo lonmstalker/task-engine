@@ -152,6 +152,16 @@ task:
 - `TaskEventStore`: хранит контексты запросов/дубликатов и создает события цепочек.
 - `TaskEventOutboxStore`: выборка и публикация outbox записей для Kafka.
 
+### Дополнительные расширения хранилищ
+
+- `TaskLeaseStore`: безопасные обновления по lease owner/expiry.
+- `TaskMaintenanceStore`: очистка терминальных задач по retention окну.
+- `TaskStoreStatsProvider`: метрики backlog по задачам.
+- `TaskEventOutboxAdminStore`: попытки публикации + dead-letter.
+- `TaskEventOutboxBatchStore`: пакетная загрузка контекстов.
+- `TaskEventOutboxMaintenanceStore`: очистка опубликованных/dead-letter событий.
+- `TaskEventOutboxStatsProvider`: метрики backlog по outbox.
+
 ### Spring Boot свойства
 
 Префикс `task.engine`:
@@ -179,6 +189,8 @@ task:
 | `lease-duration` | `PT30S` |
 | `batch-size` | `100` |
 | `publish-timeout` | `PT30S` |
+| `failure-backoff` | `PT5S` |
+| `max-publish-attempts` | `10` |
 | `bootstrap-servers` | empty |
 | `producer-properties.*` | empty |
 | `topic` | none |
@@ -225,8 +237,30 @@ task:
 - `DUPLICATE`: payload повторных запросов.
 - `CHAIN`: payload задач в цепочке, которые включили `contributesToChainContext`.
 
+### Ошибки зависимостей
+
+`DEPENDS_ON` требует успешного завершения зависимости. Если зависимость завершилась ошибкой,
+зависимые задачи помечаются как `CANCELLED` с ошибкой типа `DependencyFailed`. Задачи, которые
+ссылаются на уже упавшие зависимости, отменяются при создании.
+
+### Lease‑безопасные обновления
+
+Хранилища, реализующие `TaskLeaseStore`, защищают обновления по lease owner/expiry и не дают
+устаревшим воркерам перезаписывать состояние.
+
+### Повторы outbox и dead‑letter
+
+Для Kafka‑публикации используются backoff и максимальное число попыток. При превышении лимита событие
+маркируется как dead‑letter и больше не забирается claim запросом.
+
 ### Публикация outbox
 
 События пишутся в `task_event_outbox` и публикуются `KafkaTaskEventPublisher`. Паблишер берет
 события в аренду, сериализует, публикует в Kafka и помечает как опубликованные. При ошибке аренда
 освобождается для повторной попытки.
+
+### Maintenance и метрики
+
+Postgres‑хранилища предоставляют операции retention (`TaskMaintenanceStore`,
+`TaskEventOutboxMaintenanceStore`) и статистику backlog (`TaskStoreStatsProvider`,
+`TaskEventOutboxStatsProvider`). В стартере Spring Boot эти метрики экспортируются через Micrometer.

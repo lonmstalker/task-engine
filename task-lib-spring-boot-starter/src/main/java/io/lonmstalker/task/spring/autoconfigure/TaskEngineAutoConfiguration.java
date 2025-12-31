@@ -102,4 +102,13 @@ public class TaskEngineAutoConfiguration {
     ) {
         return new TaskDispatcherReporter(dispatcher, meterRegistryProvider);
     }
+
+    @Bean
+    @ConditionalOnBean(TaskStore.class)
+    public TaskStoreReporter taskStoreReporter(
+        TaskStore store,
+        ObjectProvider<MeterRegistry> meterRegistryProvider
+    ) {
+        return new TaskStoreReporter(store, meterRegistryProvider);
+    }
 }

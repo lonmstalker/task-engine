@@ -69,13 +69,19 @@ class TaskKafkaAutoConfigurationTest {
                 Gauge running = registry.find("task.kafka.publisher.running").gauge();
                 Gauge batchSize = registry.find("task.kafka.publisher.batch_size").gauge();
                 Gauge pollInterval = registry.find("task.kafka.publisher.poll_interval_ms").gauge();
+                Gauge failureBackoff = registry.find("task.kafka.publisher.failure_backoff_ms").gauge();
+                Gauge maxAttempts = registry.find("task.kafka.publisher.max_publish_attempts").gauge();
 
                 assertThat(running).isNotNull();
                 assertThat(batchSize).isNotNull();
                 assertThat(pollInterval).isNotNull();
+                assertThat(failureBackoff).isNotNull();
+                assertThat(maxAttempts).isNotNull();
                 assertThat(running.value()).isEqualTo(0.0);
                 assertThat(batchSize.value()).isEqualTo(100.0);
                 assertThat(pollInterval.value()).isEqualTo(1000.0);
+                assertThat(failureBackoff.value()).isEqualTo(5000.0);
+                assertThat(maxAttempts.value()).isEqualTo(10.0);
             });
     }
 

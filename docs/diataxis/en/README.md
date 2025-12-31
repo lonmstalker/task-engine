@@ -151,6 +151,16 @@ Optional customizations:
 - `TaskEventStore`: records request/duplicate contexts and creates chain events.
 - `TaskEventOutboxStore`: claims and publishes Kafka outbox records.
 
+### Optional store extensions
+
+- `TaskLeaseStore`: safe updates guarded by lease owner/expiry.
+- `TaskMaintenanceStore`: purge terminal tasks after a retention window.
+- `TaskStoreStatsProvider`: task backlog metrics.
+- `TaskEventOutboxAdminStore`: publish attempt tracking + dead-lettering.
+- `TaskEventOutboxBatchStore`: batch context loading.
+- `TaskEventOutboxMaintenanceStore`: purge published/dead-lettered outbox events.
+- `TaskEventOutboxStatsProvider`: outbox backlog metrics.
+
 ### Spring Boot properties
 
 Prefix `task.engine`:
@@ -178,6 +188,8 @@ Prefix `task.kafka`:
 | `lease-duration` | `PT30S` |
 | `batch-size` | `100` |
 | `publish-timeout` | `PT30S` |
+| `failure-backoff` | `PT5S` |
+| `max-publish-attempts` | `10` |
 | `bootstrap-servers` | empty |
 | `producer-properties.*` | empty |
 | `topic` | none |
@@ -222,8 +234,30 @@ For non-failed tasks, the event is delayed until there are no `DEPENDS_ON` depen
 - `DUPLICATE`: payloads from duplicate submits.
 - `CHAIN`: payloads from tasks in the chain that opted in via `contributesToChainContext`.
 
+### Dependency failures
+
+`DEPENDS_ON` requires the dependency to complete successfully. If a dependency fails, dependent tasks are
+cancelled with `TaskStatus.CANCELLED` and an error of type `DependencyFailed`. Submissions that reference
+already failed dependencies are cancelled immediately.
+
+### Lease-safe updates
+
+Stores that implement `TaskLeaseStore` guard updates by lease owner and expiry, preventing stale workers
+from overwriting newer task state after lease loss.
+
+### Outbox retries and dead letters
+
+Kafka outbox publishing uses a failure backoff and a maximum publish attempt count. When attempts are
+exhausted, events are marked as dead-lettered and skipped by the claim query.
+
 ### Outbox publishing
 
 Events are written to `task_event_outbox` and published by `KafkaTaskEventPublisher`. The publisher
 claims events with a lease, serializes them, publishes to Kafka, and marks them as published. Failures
 release the lease for retry.
+
+### Maintenance and metrics
+
+Postgres stores provide retention helpers (`TaskMaintenanceStore`, `TaskEventOutboxMaintenanceStore`) and
+stats providers for backlog gauges (`TaskStoreStatsProvider`, `TaskEventOutboxStatsProvider`). When using
+the Spring Boot starter with Micrometer, these gauges are exported automatically.

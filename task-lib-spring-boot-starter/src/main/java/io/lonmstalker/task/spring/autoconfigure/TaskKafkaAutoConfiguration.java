@@ -104,7 +104,9 @@ public class TaskKafkaAutoConfiguration {
             leaseOwner,
             properties.getLeaseDuration(),
             properties.getBatchSize(),
-            properties.getPublishTimeout()
+            properties.getPublishTimeout(),
+            properties.getFailureBackoff(),
+            properties.getMaxPublishAttempts()
         );
 
         Clock clock = clockProvider.getIfAvailable(Clock::systemUTC);
@@ -134,6 +136,15 @@ public class TaskKafkaAutoConfiguration {
         ObjectProvider<MeterRegistry> meterRegistryProvider
     ) {
         return new KafkaTaskEventPublisherReporter(publisher, lifecycle, properties, meterRegistryProvider);
+    }
+
+    @Bean
+    @ConditionalOnBean(TaskEventOutboxStore.class)
+    public KafkaTaskOutboxReporter kafkaTaskOutboxReporter(
+        TaskEventOutboxStore outboxStore,
+        ObjectProvider<MeterRegistry> meterRegistryProvider
+    ) {
+        return new KafkaTaskOutboxReporter(outboxStore, meterRegistryProvider);
     }
 
     private static String resolveLeaseOwner(

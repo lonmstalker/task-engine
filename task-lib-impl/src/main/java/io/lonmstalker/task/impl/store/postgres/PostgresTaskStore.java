@@ -9,11 +9,17 @@ import io.lonmstalker.task.api.model.TaskKey;
 import io.lonmstalker.task.api.model.TaskLink;
 import io.lonmstalker.task.api.model.TaskPayload;
 import io.lonmstalker.task.api.model.TaskType;
+import io.lonmstalker.task.api.model.TaskErrorInfo;
+import io.lonmstalker.task.api.store.TaskLeaseStore;
+import io.lonmstalker.task.api.store.TaskMaintenanceStore;
 import io.lonmstalker.task.api.store.TaskClaim;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskRecordUpdater;
 import io.lonmstalker.task.api.store.TaskStore;
+import io.lonmstalker.task.api.store.TaskStoreStats;
+import io.lonmstalker.task.api.store.TaskStoreStatsProvider;
 import io.lonmstalker.task.impl.store.TaskChainStore;
+import io.lonmstalker.task.impl.store.TaskDependencyStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -27,7 +33,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * PostgreSQL-backed task store.
  */
 @ThreadSafe
-public final class PostgresTaskStore implements TaskStore, TaskEventTransactionalStore, TaskChainStore {
+public final class PostgresTaskStore implements TaskStore, TaskEventTransactionalStore, TaskChainStore,
+    TaskLeaseStore, TaskDependencyStore, TaskStoreStatsProvider, TaskMaintenanceStore {
 
     private final @NonNull PostgresTransactionManager transactionManager;
     private final @NonNull PostgresTaskRepository taskRepository;
@@ -88,6 +95,16 @@ public final class PostgresTaskStore implements TaskStore, TaskEventTransactiona
     }
 
     @Override
+    public boolean updateIfLeased(
+        @NonNull TaskRecord record,
+        @NonNull String expectedLeaseOwner,
+        @NonNull Instant expectedLeaseUntil,
+        @NonNull Instant now
+    ) {
+        return taskRepository.updateIfLeased(record, expectedLeaseOwner, expectedLeaseUntil, now);
+    }
+
+    @Override
     public @NonNull List<TaskLink> findLinks(
         @NonNull TaskId id
     ) {
@@ -99,6 +116,30 @@ public final class PostgresTaskStore implements TaskStore, TaskEventTransactiona
         @NonNull TaskId id
     ) {
         return taskRepository.hasDependents(id);
+    }
+
+    @Override
+    public @NonNull List<TaskId> findFailedDependencies(
+        @NonNull List<TaskLink> links
+    ) {
+        return taskRepository.findFailedDependencies(links);
+    }
+
+    @Override
+    public void cancelDependents(
+        @NonNull TaskId rootTaskId,
+        @NonNull TaskErrorInfo error,
+        @NonNull Instant now
+    ) {
+        taskRepository.cancelDependents(rootTaskId, error, now);
+    }
+
+    @Override
+    public void cancelBlockedByFailedDependencies(
+        @NonNull TaskErrorInfo error,
+        @NonNull Instant now
+    ) {
+        taskRepository.cancelBlockedByFailedDependencies(error, now);
     }
 
     @Override
@@ -120,6 +161,18 @@ public final class PostgresTaskStore implements TaskStore, TaskEventTransactiona
         @NonNull Instant now
     ) {
         taskRepository.resetExpiredLeases(now);
+    }
+
+    @Override
+    public @NonNull TaskStoreStats loadStats() {
+        return taskRepository.loadStats();
+    }
+
+    @Override
+    public int purgeCompletedTasks(
+        @NonNull Instant olderThan
+    ) {
+        return taskRepository.purgeCompletedTasks(olderThan);
     }
 
     @Override

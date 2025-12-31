@@ -49,6 +49,8 @@ Prefix: `task.kafka`
 | `lease-duration` | `PT30S` | Lease duration for outbox claims. |
 | `batch-size` | `100` | Max events claimed per poll. |
 | `publish-timeout` | `PT30S` | Max time to await Kafka publish. |
+| `failure-backoff` | `PT5S` | Delay before retrying failed publishes. |
+| `max-publish-attempts` | `10` | Max publish attempts before dead-lettering (0 = unlimited). |
 | `bootstrap-servers` | none | Kafka bootstrap servers. |
 | `producer-properties.*` | none | Extra Kafka producer properties. |
 | `topic` | none | Kafka topic for task events. |
@@ -66,11 +68,22 @@ When a `MeterRegistry` bean is present, the starter registers:
 - `task.kafka.publisher.poll_interval_ms` (gauge, when enabled)
 - `task.kafka.publisher.lease_duration_ms` (gauge, when enabled)
 - `task.kafka.publisher.publish_timeout_ms` (gauge, when enabled)
+- `task.kafka.publisher.failure_backoff_ms` (gauge, when enabled)
+- `task.kafka.publisher.max_publish_attempts` (gauge, when enabled)
+- `task.kafka.outbox.pending` (gauge, when enabled, when outbox store supports stats)
+- `task.kafka.outbox.dead_lettered` (gauge, when enabled, when outbox store supports stats)
+- `task.store.total` (gauge, when task store supports stats)
+- `task.store.pending` (gauge, when task store supports stats)
+- `task.store.running` (gauge, when task store supports stats)
+- `task.store.waiting_retry` (gauge, when task store supports stats)
+- `task.store.completed` (gauge, when task store supports stats)
+- `task.store.failed` (gauge, when task store supports stats)
+- `task.store.cancelled` (gauge, when task store supports stats)
 
 It also logs a summary at startup:
 ```
 Task dispatcher configured: type=..., virtualThreads=..., parallelism=..., threadNameFormat=...
-Kafka task event publisher configured: type=..., topic=..., batchSize=..., pollInterval=..., leaseDuration=..., publishTimeout=..., autoStart=..., threadNameFormat=..., bootstrapServers=..., producerPropertiesKeys=...
+Kafka task event publisher configured: type=..., topic=..., batchSize=..., pollInterval=..., leaseDuration=..., publishTimeout=..., failureBackoff=..., maxPublishAttempts=..., autoStart=..., threadNameFormat=..., bootstrapServers=..., producerPropertiesKeys=...
 ```
 
 ## Customization

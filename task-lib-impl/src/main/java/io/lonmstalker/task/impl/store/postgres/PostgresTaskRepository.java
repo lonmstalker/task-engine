@@ -14,6 +14,8 @@ import io.lonmstalker.task.api.model.TaskType;
 import io.lonmstalker.task.api.store.TaskClaim;
 import io.lonmstalker.task.api.store.TaskRecord;
 import io.lonmstalker.task.api.store.TaskRecordUpdater;
+import io.lonmstalker.task.api.store.TaskStoreStats;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -65,6 +67,26 @@ final class PostgresTaskRepository {
             last_error_type = ?,
             last_error_message = ?
         WHERE id = ?
+        """;
+
+    private static final @NonNull String UPDATE_TASK_IF_LEASED_SQL = """
+        UPDATE task_tasks
+        SET task_state = ?,
+            task_status = ?,
+            attempt = ?,
+            max_attempts = ?,
+            next_run_at = ?,
+            lease_owner = ?,
+            lease_until = ?,
+            payload = ?,
+            payload_content_type = ?,
+            updated_at = ?,
+            last_error_type = ?,
+            last_error_message = ?
+        WHERE id = ?
+          AND lease_owner = ?
+          AND lease_until = ?
+          AND lease_until >= ?
         """;
 
     private static final @NonNull String SELECT_BY_KEY_FOR_UPDATE_SQL = """
@@ -179,6 +201,78 @@ final class PostgresTaskRepository {
         WHERE linked_task_id = ?
           AND link_type = 'DEPENDS_ON'
         LIMIT 1
+        """;
+
+    private static final @NonNull String SELECT_FAILED_DEPENDENCIES_SQL = """
+        SELECT id
+        FROM task_tasks
+        WHERE id = ANY (?)
+          AND task_status IN ('FAILED', 'CANCELLED')
+        """;
+
+    private static final @NonNull String CANCEL_DEPENDENTS_SQL = """
+        WITH RECURSIVE dependents AS (
+            SELECT t.id
+            FROM task_links l
+            JOIN task_tasks t ON t.id = l.task_id
+            WHERE l.link_type = 'DEPENDS_ON'
+              AND l.linked_task_id = ?
+            UNION
+            SELECT t.id
+            FROM task_links l
+            JOIN task_tasks t ON t.id = l.task_id
+            JOIN dependents d ON d.id = l.linked_task_id
+            WHERE l.link_type = 'DEPENDS_ON'
+        )
+        UPDATE task_tasks
+        SET task_status = 'CANCELLED',
+            next_run_at = NULL,
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = ?,
+            last_error_type = ?,
+            last_error_message = ?
+        WHERE id IN (SELECT id FROM dependents)
+          AND task_status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+        """;
+
+    private static final @NonNull String CANCEL_BLOCKED_SQL = """
+        UPDATE task_tasks t
+        SET task_status = 'CANCELLED',
+            next_run_at = NULL,
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = ?,
+            last_error_type = ?,
+            last_error_message = ?
+        WHERE t.task_status IN ('PENDING', 'WAITING_RETRY')
+          AND EXISTS (
+              SELECT 1
+              FROM task_links l
+              JOIN task_tasks dep ON dep.id = l.linked_task_id
+              WHERE l.task_id = t.id
+                AND l.link_type = 'DEPENDS_ON'
+                AND dep.task_status IN ('FAILED', 'CANCELLED')
+          )
+        """;
+
+    private static final @NonNull String LOAD_STATS_SQL = """
+        SELECT task_status, COUNT(*) AS total
+        FROM task_tasks
+        GROUP BY task_status
+        """;
+
+    private static final @NonNull String PURGE_COMPLETED_SQL = """
+        DELETE FROM task_tasks t
+        WHERE t.task_status IN ('COMPLETED', 'FAILED', 'CANCELLED')
+          AND t.updated_at < ?
+          AND NOT EXISTS (
+              SELECT 1
+              FROM task_event_outbox o
+              WHERE o.task_id = t.id
+                AND o.published_at IS NULL
+                AND o.dead_letter_at IS NULL
+          )
         """;
 
     private final @NonNull PostgresTransactionManager transactionManager;
@@ -408,6 +502,33 @@ final class PostgresTaskRepository {
         }
     }
 
+    boolean updateIfLeased(
+        @NonNull TaskRecord record,
+        @NonNull String expectedLeaseOwner,
+        @NonNull Instant expectedLeaseUntil,
+        @NonNull Instant now
+    ) {
+        Objects.requireNonNull(record, "record");
+        Objects.requireNonNull(expectedLeaseOwner, "expectedLeaseOwner");
+        Objects.requireNonNull(expectedLeaseUntil, "expectedLeaseUntil");
+        Objects.requireNonNull(now, "now");
+
+        try {
+            return transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(UPDATE_TASK_IF_LEASED_SQL)) {
+                    bindTaskUpdate(statement, record);
+                    statement.setObject(13, record.id().value());
+                    statement.setString(14, expectedLeaseOwner);
+                    statement.setTimestamp(15, toTimestamp(expectedLeaseUntil));
+                    statement.setTimestamp(16, toTimestamp(now));
+                    return statement.executeUpdate() == 1;
+                }
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to update task with lease", e);
+        }
+    }
+
     @NonNull List<TaskLink> findLinks(
         @NonNull TaskId id
     ) {
@@ -452,6 +573,144 @@ final class PostgresTaskRepository {
             });
         } catch (SQLException e) {
             throw new TaskStoreException("Failed to check dependents", e);
+        }
+    }
+
+    @NonNull List<TaskId> findFailedDependencies(
+        @NonNull List<TaskLink> links
+    ) {
+        Objects.requireNonNull(links, "links");
+
+        List<UUID> dependencyIds = new ArrayList<>();
+        for (TaskLink link : links) {
+            if (link.type() == TaskLinkType.DEPENDS_ON) {
+                dependencyIds.add(link.targetId().value());
+            }
+        }
+
+        if (dependencyIds.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            return transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(SELECT_FAILED_DEPENDENCIES_SQL)) {
+                    UUID[] ids = dependencyIds.toArray(UUID[]::new);
+                    Array array = connection.createArrayOf("uuid", ids);
+                    try {
+                        statement.setArray(1, array);
+                        try (ResultSet resultSet = statement.executeQuery()) {
+                            List<TaskId> failed = new ArrayList<>();
+                            while (resultSet.next()) {
+                                failed.add(new TaskId((UUID) resultSet.getObject("id")));
+                            }
+                            return List.copyOf(failed);
+                        }
+                    } finally {
+                        array.free();
+                    }
+                }
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to find failed dependencies", e);
+        }
+    }
+
+    void cancelDependents(
+        @NonNull TaskId rootTaskId,
+        @NonNull TaskErrorInfo error,
+        @NonNull Instant now
+    ) {
+        Objects.requireNonNull(rootTaskId, "rootTaskId");
+        Objects.requireNonNull(error, "error");
+        Objects.requireNonNull(now, "now");
+
+        try {
+            transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(CANCEL_DEPENDENTS_SQL)) {
+                    statement.setObject(1, rootTaskId.value());
+                    statement.setTimestamp(2, toTimestamp(now));
+                    statement.setString(3, error.type());
+                    statement.setString(4, error.message());
+                    statement.executeUpdate();
+                }
+                return null;
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to cancel dependent tasks", e);
+        }
+    }
+
+    void cancelBlockedByFailedDependencies(
+        @NonNull TaskErrorInfo error,
+        @NonNull Instant now
+    ) {
+        Objects.requireNonNull(error, "error");
+        Objects.requireNonNull(now, "now");
+
+        try {
+            transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(CANCEL_BLOCKED_SQL)) {
+                    statement.setTimestamp(1, toTimestamp(now));
+                    statement.setString(2, error.type());
+                    statement.setString(3, error.message());
+                    statement.executeUpdate();
+                }
+                return null;
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to cancel tasks blocked by failed dependencies", e);
+        }
+    }
+
+    @NonNull TaskStoreStats loadStats() {
+        try {
+            return transactionManager.withConnection(connection -> {
+                long pending = 0;
+                long running = 0;
+                long waitingRetry = 0;
+                long completed = 0;
+                long failed = 0;
+                long cancelled = 0;
+
+                try (PreparedStatement statement = connection.prepareStatement(LOAD_STATS_SQL);
+                    ResultSet resultSet = statement.executeQuery()) {
+                    while (resultSet.next()) {
+                        String status = resultSet.getString("task_status");
+                        long total = resultSet.getLong("total");
+                        switch (TaskStatus.valueOf(status)) {
+                            case PENDING -> pending = total;
+                            case RUNNING -> running = total;
+                            case WAITING_RETRY -> waitingRetry = total;
+                            case COMPLETED -> completed = total;
+                            case FAILED -> failed = total;
+                            case CANCELLED -> cancelled = total;
+                        }
+                    }
+                }
+
+                long total = pending + running + waitingRetry + completed + failed + cancelled;
+                return new TaskStoreStats(total, pending, running, waitingRetry, completed, failed, cancelled);
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to load task stats", e);
+        }
+    }
+
+    int purgeCompletedTasks(
+        @NonNull Instant olderThan
+    ) {
+        Objects.requireNonNull(olderThan, "olderThan");
+
+        try {
+            return transactionManager.withConnection(connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(PURGE_COMPLETED_SQL)) {
+                    statement.setTimestamp(1, toTimestamp(olderThan));
+                    return statement.executeUpdate();
+                }
+            });
+        } catch (SQLException e) {
+            throw new TaskStoreException("Failed to purge completed tasks", e);
         }
     }
 

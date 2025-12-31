@@ -12,14 +12,30 @@ public record KafkaTaskEventPublisherConfig(
     @NonNull String leaseOwner,
     @NonNull Duration leaseDuration,
     int batchSize,
-    @NonNull Duration publishTimeout
+    @NonNull Duration publishTimeout,
+    @NonNull Duration failureBackoff,
+    int maxPublishAttempts
 ) {
+
+    public static final Duration DEFAULT_FAILURE_BACKOFF = Duration.ofSeconds(5);
+    public static final int DEFAULT_MAX_PUBLISH_ATTEMPTS = 10;
+
+    public KafkaTaskEventPublisherConfig(
+        @NonNull String topic,
+        @NonNull String leaseOwner,
+        @NonNull Duration leaseDuration,
+        int batchSize,
+        @NonNull Duration publishTimeout
+    ) {
+        this(topic, leaseOwner, leaseDuration, batchSize, publishTimeout, DEFAULT_FAILURE_BACKOFF, DEFAULT_MAX_PUBLISH_ATTEMPTS);
+    }
 
     public KafkaTaskEventPublisherConfig {
         Objects.requireNonNull(topic, "topic");
         Objects.requireNonNull(leaseOwner, "leaseOwner");
         Objects.requireNonNull(leaseDuration, "leaseDuration");
         Objects.requireNonNull(publishTimeout, "publishTimeout");
+        Objects.requireNonNull(failureBackoff, "failureBackoff");
         if (topic.isBlank()) {
             throw new IllegalArgumentException("topic must not be blank");
         }
@@ -34,6 +50,12 @@ public record KafkaTaskEventPublisherConfig(
         }
         if (publishTimeout.isNegative()) {
             throw new IllegalArgumentException("publishTimeout must be >= 0");
+        }
+        if (failureBackoff.isNegative()) {
+            throw new IllegalArgumentException("failureBackoff must be >= 0");
+        }
+        if (maxPublishAttempts < 0) {
+            throw new IllegalArgumentException("maxPublishAttempts must be >= 0");
         }
     }
 }
