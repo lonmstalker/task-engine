@@ -9,6 +9,9 @@ spring-boot = "3.2.5"
 micrometer = "1.12.5"
 assertj = "3.25.3"
 jcip = "1.0"
+postgresql = "42.7.3"
+testcontainers = "1.19.8"
+jmh = "1.37"
 
 [libraries]
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
@@ -24,3 +27,9 @@ spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-star
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 jcip-annotations = { module = "net.jcip:jcip-annotations", version.ref = "jcip" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
+jmh-generator-annprocess = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }
