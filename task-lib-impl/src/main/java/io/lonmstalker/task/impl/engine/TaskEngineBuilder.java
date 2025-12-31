@@ -136,6 +136,9 @@ public final class TaskEngineBuilder {
             resolvedEventStore = (TaskEventStore) store;
         }
 
+        Map<TaskType, TaskDefinition<?>> registry = Map.copyOf(definitions);
+        TaskEventPublisher eventPublisher = TaskEventPublisherFactory.create(store, resolvedEventStore, registry);
+
         return new TaskEngineImpl(
             store,
             dispatcher,
@@ -145,8 +148,8 @@ public final class TaskEngineBuilder {
             recoveryInterval,
             claimBatchSize,
             engineId,
-            Map.copyOf(definitions),
-            resolvedEventStore
+            registry,
+            eventPublisher
         );
     }
 }

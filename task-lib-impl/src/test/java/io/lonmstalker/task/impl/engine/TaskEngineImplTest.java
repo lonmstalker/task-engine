@@ -654,6 +654,50 @@ class TaskEngineImplTest {
                 assertThat(contexts).noneMatch(entry -> entry.kind() == TaskEventContextKind.REQUEST);
             }
         }
+
+        @Test
+        @DisplayName("shouldCreateEventForFailedTask")
+        void shouldCreateEventForFailedTask() {
+            InMemoryTaskStore store = new InMemoryTaskStore();
+            InMemoryTaskEventStore eventStore = new InMemoryTaskEventStore();
+            TaskContextCodec<String> codec = new StringCodec();
+
+            TaskDefinition<String> definition = TaskDefinition.<String>builder()
+                .type(TaskType.of("fail"))
+                .handler(context -> TaskResult.failure(new TaskExecutionException("boom")))
+                .contextCodec(codec)
+                .contextMerger((existing, incoming) -> existing)
+                .stateMachine(OrderedStateMachine.of(List.of(STATE_NEW, STATE_DONE)))
+                .retryPolicy(RetryPolicies.none())
+                .build();
+
+            try (TaskEngine engine = TaskEngineBuilder.builder()
+                .store(store)
+                .eventStore(eventStore)
+                .dispatcher(new DirectTaskDispatcher())
+                .registerDefinition(definition)
+                .build()) {
+
+                TaskSubmissionResult created = engine.submit(new TaskRequest<>(
+                    TaskKey.of("fail-task"),
+                    definition.type(),
+                    STATE_NEW,
+                    "ctx",
+                    List.of()
+                ));
+
+                TaskEngineImpl impl = (TaskEngineImpl) engine;
+                impl.pollOnce();
+
+                List<TaskEventRecord> events = eventStore.findEventsByTaskId(created.snapshot().id());
+                assertThat(events).hasSize(1);
+
+                TaskEventRecord event = events.get(0);
+                List<TaskEventContextEntry> contexts = eventStore.findContexts(event.id());
+                assertThat(contexts).anyMatch(entry -> entry.kind() == TaskEventContextKind.REQUEST);
+                assertThat(contexts).anyMatch(entry -> entry.kind() == TaskEventContextKind.CHAIN);
+            }
+        }
     }
 
     private static TaskSnapshot awaitStatus(
