@@ -231,7 +231,7 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
         }
 
         int attempts = adminStore.loadPublishAttempts(eventId);
-        if (attempts < maxPublishAttempts) {
+        if (attempts <= maxPublishAttempts) {
             return false;
         }
 

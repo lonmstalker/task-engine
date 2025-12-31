@@ -33,6 +33,9 @@ final class KafkaTaskEventPublisherLifecycle implements SmartLifecycle {
     ) {
         this.publisher = Objects.requireNonNull(publisher, "publisher");
         this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
+        if (pollInterval.toMillis() <= 0) {
+            throw new IllegalArgumentException("pollInterval must be >= 1ms");
+        }
         this.autoStartup = autoStartup;
         this.threadNameFormat = Objects.requireNonNull(threadNameFormat, "threadNameFormat");
     }

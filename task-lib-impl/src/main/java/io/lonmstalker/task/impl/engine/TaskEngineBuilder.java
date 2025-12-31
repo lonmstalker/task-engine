@@ -77,7 +77,7 @@ public final class TaskEngineBuilder {
         @NonNull Duration pollInterval
     ) {
         this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
-        Preconditions.checkArgument(!pollInterval.isNegative(), "pollInterval must be >= 0");
+        Preconditions.checkArgument(pollInterval.toMillis() > 0, "pollInterval must be >= 1ms");
         return this;
     }
 
@@ -93,7 +93,7 @@ public final class TaskEngineBuilder {
         @NonNull Duration recoveryInterval
     ) {
         this.recoveryInterval = Objects.requireNonNull(recoveryInterval, "recoveryInterval");
-        Preconditions.checkArgument(!recoveryInterval.isNegative(), "recoveryInterval must be >= 0");
+        Preconditions.checkArgument(recoveryInterval.toMillis() > 0, "recoveryInterval must be >= 1ms");
         return this;
     }
 

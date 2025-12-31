@@ -62,6 +62,13 @@ final class PostgresTransactionManager {
             } catch (SQLException e) {
                 connection.rollback();
                 throw e;
+            } catch (RuntimeException | Error e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    throw new TaskStoreException("Failed to rollback transaction", rollbackError);
+                }
+                throw e;
             }
         }
     }

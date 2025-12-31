@@ -261,7 +261,7 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
-                    .hasMessageContaining("pollInterval must be >= 0");
+                    .hasMessageContaining("pollInterval must be >= 1ms");
             });
     }
 
@@ -285,7 +285,7 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
-                    .hasMessageContaining("recoveryInterval must be >= 0");
+                    .hasMessageContaining("recoveryInterval must be >= 1ms");
             });
     }
 
