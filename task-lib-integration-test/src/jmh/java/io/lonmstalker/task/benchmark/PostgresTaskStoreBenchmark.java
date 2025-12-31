@@ -42,9 +42,9 @@ import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Warmup(iterations = 2, time = 1)
-@Measurement(iterations = 3, time = 1)
-@Fork(1)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
+@Fork(2)
 public class PostgresTaskStoreBenchmark {
 
     private static final TaskType TASK_TYPE = TaskType.of("bench");

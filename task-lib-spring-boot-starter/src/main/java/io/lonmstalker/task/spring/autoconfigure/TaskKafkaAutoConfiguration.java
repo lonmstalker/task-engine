@@ -7,6 +7,7 @@ import io.lonmstalker.task.kafka.TaskEventKeyProvider;
 import io.lonmstalker.task.kafka.TaskEventMessageCodec;
 import io.lonmstalker.task.kafka.outbox.TaskEventOutboxStore;
 import io.lonmstalker.task.kafka.outbox.postgres.PostgresTaskEventOutboxStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
@@ -122,6 +123,17 @@ public class TaskKafkaAutoConfiguration {
             properties.isAutoStart(),
             resolveThreadNameFormat(properties.getThreadNameFormat())
         );
+    }
+
+    @Bean
+    @ConditionalOnBean(KafkaTaskEventPublisher.class)
+    public KafkaTaskEventPublisherReporter kafkaTaskEventPublisherReporter(
+        KafkaTaskEventPublisher publisher,
+        KafkaTaskEventPublisherLifecycle lifecycle,
+        TaskKafkaProperties properties,
+        ObjectProvider<MeterRegistry> meterRegistryProvider
+    ) {
+        return new KafkaTaskEventPublisherReporter(publisher, lifecycle, properties, meterRegistryProvider);
     }
 
     private static String resolveLeaseOwner(

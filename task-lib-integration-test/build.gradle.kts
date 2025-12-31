@@ -29,7 +29,7 @@ dependencies {
 }
 
 jmh {
-    warmupIterations.set(2)
-    iterations.set(3)
-    fork.set(1)
+    warmupIterations.set(3)
+    iterations.set(5)
+    fork.set(2)
 }

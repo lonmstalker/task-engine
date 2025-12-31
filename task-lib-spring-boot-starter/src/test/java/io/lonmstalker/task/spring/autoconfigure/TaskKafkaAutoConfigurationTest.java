@@ -1,5 +1,8 @@
 package io.lonmstalker.task.spring.autoconfigure;
 
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.lonmstalker.task.kafka.KafkaTaskEventPublisher;
 import io.lonmstalker.task.kafka.outbox.TaskEventOutboxStore;
 import java.io.PrintWriter;
@@ -51,12 +54,46 @@ class TaskKafkaAutoConfigurationTest {
             });
     }
 
+    @Test
+    void registersPublisherMetrics() {
+        contextRunner
+            .withUserConfiguration(BaseConfig.class, MetricsConfig.class)
+            .withPropertyValues(
+                "task.kafka.enabled=true",
+                "task.kafka.auto-start=false",
+                "task.kafka.topic=task-events",
+                "task.kafka.bootstrap-servers=localhost:9092"
+            )
+            .run(context -> {
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                Gauge running = registry.find("task.kafka.publisher.running").gauge();
+                Gauge batchSize = registry.find("task.kafka.publisher.batch_size").gauge();
+                Gauge pollInterval = registry.find("task.kafka.publisher.poll_interval_ms").gauge();
+
+                assertThat(running).isNotNull();
+                assertThat(batchSize).isNotNull();
+                assertThat(pollInterval).isNotNull();
+                assertThat(running.value()).isEqualTo(0.0);
+                assertThat(batchSize.value()).isEqualTo(100.0);
+                assertThat(pollInterval.value()).isEqualTo(1000.0);
+            });
+    }
+
     @Configuration
     static class BaseConfig {
 
         @Bean
         DataSource dataSource() {
             return new StubDataSource();
+        }
+    }
+
+    @Configuration
+    static class MetricsConfig {
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
         }
     }
 

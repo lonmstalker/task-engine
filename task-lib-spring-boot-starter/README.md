@@ -55,10 +55,17 @@ Prefix: `task.kafka`
 When a `MeterRegistry` bean is present, the starter registers:
 - `task.engine.dispatcher.virtual_threads` (gauge, 1 = true, 0 = false)
 - `task.engine.dispatcher.parallelism` (gauge)
+- `task.kafka.publisher.running` (gauge, 1 = true, 0 = false, when enabled)
+- `task.kafka.publisher.auto_start` (gauge, 1 = true, 0 = false, when enabled)
+- `task.kafka.publisher.batch_size` (gauge, when enabled)
+- `task.kafka.publisher.poll_interval_ms` (gauge, when enabled)
+- `task.kafka.publisher.lease_duration_ms` (gauge, when enabled)
+- `task.kafka.publisher.publish_timeout_ms` (gauge, when enabled)
 
 It also logs a summary at startup:
 ```
 Task dispatcher configured: type=..., virtualThreads=..., parallelism=..., threadNameFormat=...
+Kafka task event publisher configured: type=..., topic=..., batchSize=..., pollInterval=..., leaseDuration=..., publishTimeout=..., autoStart=..., threadNameFormat=..., bootstrapServers=..., producerPropertiesKeys=...
 ```
 
 ## Customization
