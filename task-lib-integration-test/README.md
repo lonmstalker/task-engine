@@ -3,5 +3,5 @@
 Integration tests (Testcontainers) and JMH benchmarks for Task Lib modules.
 
 Docs:
-- English: `docs/diataxis/en/README.md`
-- Russian: `docs/diataxis/ru/README.md`
+- English: `docs/README.md`
+- Russian: `docs/ru/README.md`

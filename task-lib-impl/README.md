@@ -3,5 +3,5 @@
 Task engine implementation and PostgreSQL-backed store.
 
 Docs:
-- English: `docs/diataxis/en/README.md`
-- Russian: `docs/diataxis/ru/README.md`
+- English: `docs/README.md`
+- Russian: `docs/ru/README.md`

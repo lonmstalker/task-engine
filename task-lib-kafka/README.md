@@ -3,5 +3,5 @@
 Kafka outbox publisher and PostgreSQL outbox store.
 
 Docs:
-- English: `docs/diataxis/en/README.md`
-- Russian: `docs/diataxis/ru/README.md`
+- English: `docs/README.md`
+- Russian: `docs/ru/README.md`

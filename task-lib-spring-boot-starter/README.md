@@ -4,8 +4,8 @@ Spring Boot starter that auto-configures `TaskEngine` and related infrastructure
 
 ## Project documentation
 
-- English: `docs/diataxis/en/README.md`
-- Russian: `docs/diataxis/ru/README.md`
+- English: `docs/README.md`
+- Russian: `docs/ru/README.md`
 
 ## Auto-configuration
 

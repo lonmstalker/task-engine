@@ -2,10 +2,10 @@
 
 Task execution library with Postgres storage, Kafka outbox publishing, and Spring Boot auto-configuration.
 
-## Documentation (Diataxis)
+## Documentation
 
-- English: `docs/diataxis/en/README.md`
-- Russian: `docs/diataxis/ru/README.md`
+- English: `docs/README.md`
+- Russian: `docs/ru/README.md`
 
 ## Modules
 
