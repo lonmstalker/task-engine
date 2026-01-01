@@ -21,7 +21,7 @@ final class DefaultTaskDispatcherFactory implements TaskDispatcherFactory {
 
         if (virtualThreads) {
             ThreadFactory factory = virtualThreadFactory(properties.getThreadNameFormat());
-            ExecutorService executor = Executors.newThreadPerTaskExecutor(factory);
+            ExecutorService executor = Executors.newFixedThreadPool(properties.getParallelism(), factory);
             dispatcher = new ExecutorTaskDispatcher(executor, properties.getParallelism());
         } else {
             dispatcher = ExecutorTaskDispatcher.fixedThreadPool(

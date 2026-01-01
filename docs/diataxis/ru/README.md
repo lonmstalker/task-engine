@@ -129,7 +129,58 @@ task:
 ### Создание зависимых задач (цепочки)
 
 - Используйте `TaskLink` с `TaskLinkType.DEPENDS_ON` в `TaskRequest.links`.
-- Событие завершения цепочки отправляется, когда терминальная задача завершилась или упала.
+- Зависимая задача будет взята в работу только после `COMPLETED` всех зависимостей.
+
+```java
+TaskSubmissionResult parent = engine.submit(TaskRequest.of(
+    TaskKey.of("parent:1"),
+    TaskType.of("parent"),
+    TaskState.of("NEW"),
+    "parent-ctx"
+));
+
+TaskLink dependsOnParent = new TaskLink(parent.snapshot().id(), TaskLinkType.DEPENDS_ON);
+
+engine.submit(new TaskRequest<>(
+    TaskKey.of("child:1"),
+    TaskType.of("child"),
+    TaskState.of("NEW"),
+    null,
+    "child-ctx",
+    List.of(dependsOnParent)
+));
+```
+
+Также можно создавать зависимую задачу прямо в обработчике, используя id текущей задачи:
+
+```java
+TaskDefinition<String> parentDefinition = TaskDefinition.<String>builder()
+    .type(TaskType.of("parent"))
+    .handler(ctx -> {
+        TaskId parentId = ctx.snapshot().id();
+        TaskLink link = new TaskLink(parentId, TaskLinkType.DEPENDS_ON);
+        engine.submit(new TaskRequest<>(
+            TaskKey.of("child:" + parentId.value()),
+            TaskType.of("child"),
+            TaskState.of("NEW"),
+            null,
+            "child-ctx",
+            List.of(link)
+        ));
+        return TaskResult.success(TaskState.of("DONE"));
+    })
+    .build();
+```
+
+### Завершение задачи и события
+
+- Задача становится `COMPLETED`, когда ее `TaskState` терминальный.
+- `TaskResult.success()` двигает в `stateMachine.nextState(current)`, а
+  `TaskResult.success(nextState)` позволяет задать состояние явно.
+- `TaskResult.failure(error)` переводит в `FAILED` (с повторами, если они разрешены).
+- События цепочек создаются только если настроен `TaskEventStore`.
+  `PostgresTaskStore` включает его автоматически; для кастомных хранилищ
+  передайте `eventStore(...)` в `TaskEngineBuilder`.
 
 ## Справка
 
@@ -227,6 +278,20 @@ task:
 `TaskState` - бизнес состояние, управляется машиной состояний. `TaskStatus` - статус исполнения
 (`PENDING`, `RUNNING`, `COMPLETED` и т.д.). Обработчик может переопределить следующий state через
 `TaskResult.success(nextState)`.
+
+### TaskDefinition и машина состояний
+
+- `TaskDefinition` связывает `TaskHandler`, `TaskContextCodec`, `TaskContextMerger`,
+  `TaskStateMachine` и `RetryPolicy`.
+- `TaskContextCodec` кодирует контекст в `TaskPayload` для хранения и
+  декодирует его перед выполнением обработчика.
+- `TaskContextMerger` вызывается только для дубликатов, когда задача в `PENDING`
+  или `WAITING_RETRY`.
+- `TaskStateMachine.resolveExternalState` используется при первичной отправке и для
+  дубликатов, чтобы решить, применять, игнорировать или отклонять входящее состояние.
+- При успехе движок использует состояние из обработчика (если оно есть) либо
+  `stateMachine.nextState(current)`. Невалидные переходы приводят к ошибке и
+  обрабатываются политикой повторов.
 
 ### События цепочек и агрегация контекста
 

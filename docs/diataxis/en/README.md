@@ -128,7 +128,58 @@ Optional customizations:
 ### Create dependent tasks (chains)
 
 - Use `TaskLink` with `TaskLinkType.DEPENDS_ON` in `TaskRequest.links`.
-- Chain completion events are emitted when the terminal task completes or fails.
+- A dependent task is claimed only after all dependencies are `COMPLETED`.
+
+```java
+TaskSubmissionResult parent = engine.submit(TaskRequest.of(
+    TaskKey.of("parent:1"),
+    TaskType.of("parent"),
+    TaskState.of("NEW"),
+    "parent-ctx"
+));
+
+TaskLink dependsOnParent = new TaskLink(parent.snapshot().id(), TaskLinkType.DEPENDS_ON);
+
+engine.submit(new TaskRequest<>(
+    TaskKey.of("child:1"),
+    TaskType.of("child"),
+    TaskState.of("NEW"),
+    null,
+    "child-ctx",
+    List.of(dependsOnParent)
+));
+```
+
+You can also submit dependents from inside a handler using the current task id:
+
+```java
+TaskDefinition<String> parentDefinition = TaskDefinition.<String>builder()
+    .type(TaskType.of("parent"))
+    .handler(ctx -> {
+        TaskId parentId = ctx.snapshot().id();
+        TaskLink link = new TaskLink(parentId, TaskLinkType.DEPENDS_ON);
+        engine.submit(new TaskRequest<>(
+            TaskKey.of("child:" + parentId.value()),
+            TaskType.of("child"),
+            TaskState.of("NEW"),
+            null,
+            "child-ctx",
+            List.of(link)
+        ));
+        return TaskResult.success(TaskState.of("DONE"));
+    })
+    .build();
+```
+
+### Complete a task and emit events
+
+- A task becomes `COMPLETED` when its `TaskState` is terminal.
+- `TaskResult.success()` moves to `stateMachine.nextState(current)`; use
+  `TaskResult.success(nextState)` to override it.
+- `TaskResult.failure(error)` marks the task `FAILED` (with retries if allowed).
+- Chain events are emitted only when a `TaskEventStore` is configured.
+  `PostgresTaskStore` provides this automatically; for custom stores, pass
+  `eventStore(...)` to `TaskEngineBuilder`.
 
 ## Reference
 
@@ -225,6 +276,20 @@ A recovery loop clears expired leases so tasks can be re-claimed.
 `TaskState` is domain-specific and advanced by a state machine. `TaskStatus` is execution state
 (`PENDING`, `RUNNING`, `COMPLETED`, etc). A handler can override the next state via
 `TaskResult.success(nextState)`.
+
+### TaskDefinition and state machine
+
+- `TaskDefinition` ties together `TaskHandler`, `TaskContextCodec`, `TaskContextMerger`,
+  `TaskStateMachine`, and `RetryPolicy`.
+- `TaskContextCodec` encodes the request context into `TaskPayload` for storage and
+  decodes it before handler execution.
+- `TaskContextMerger` runs only for duplicate submissions while a task is `PENDING`
+  or `WAITING_RETRY`.
+- `TaskStateMachine.resolveExternalState` is used for the initial submit and for duplicates
+  to decide whether to apply, ignore, or reject the incoming state.
+- On success the engine uses the handler-provided next state (if any) or
+  `stateMachine.nextState(current)`. Invalid transitions result in failure and follow
+  the retry policy.
 
 ### Chain events and context aggregation
 

@@ -36,7 +36,7 @@ public class TaskEngineProperties {
     }
 
     public void setPollInterval(Duration pollInterval) {
-        this.pollInterval = pollInterval;
+        this.pollInterval = requirePositiveDuration("pollInterval", pollInterval);
     }
 
     public Duration getLeaseDuration() {
@@ -44,7 +44,7 @@ public class TaskEngineProperties {
     }
 
     public void setLeaseDuration(Duration leaseDuration) {
-        this.leaseDuration = leaseDuration;
+        this.leaseDuration = requireNonNegativeDuration("leaseDuration", leaseDuration);
     }
 
     public Duration getRecoveryInterval() {
@@ -52,7 +52,7 @@ public class TaskEngineProperties {
     }
 
     public void setRecoveryInterval(Duration recoveryInterval) {
-        this.recoveryInterval = recoveryInterval;
+        this.recoveryInterval = requirePositiveDuration("recoveryInterval", recoveryInterval);
     }
 
     public int getClaimBatchSize() {
@@ -60,7 +60,7 @@ public class TaskEngineProperties {
     }
 
     public void setClaimBatchSize(int claimBatchSize) {
-        this.claimBatchSize = claimBatchSize;
+        this.claimBatchSize = requirePositiveInt("claimBatchSize", claimBatchSize);
     }
 
     public String getEngineId() {
@@ -77,7 +77,7 @@ public class TaskEngineProperties {
 
     public static class Dispatcher {
         private boolean virtualThreads = true;
-        private int parallelism = Runtime.getRuntime().availableProcessors();
+        private int parallelism = Math.max(1, Runtime.getRuntime().availableProcessors());
         private String threadNameFormat = "task-worker-%d";
 
         public boolean isVirtualThreads() {
@@ -93,7 +93,7 @@ public class TaskEngineProperties {
         }
 
         public void setParallelism(int parallelism) {
-            this.parallelism = parallelism;
+            this.parallelism = requirePositiveInt("dispatcher.parallelism", parallelism);
         }
 
         public String getThreadNameFormat() {
@@ -101,7 +101,53 @@ public class TaskEngineProperties {
         }
 
         public void setThreadNameFormat(String threadNameFormat) {
-            this.threadNameFormat = threadNameFormat;
+            this.threadNameFormat = normalizeThreadNameFormat(threadNameFormat, "task-worker-%d");
         }
+    }
+
+    private static Duration requirePositiveDuration(
+        String name,
+        Duration value
+    ) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must be set");
+        }
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be > 0");
+        }
+        return value;
+    }
+
+    private static Duration requireNonNegativeDuration(
+        String name,
+        Duration value
+    ) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must be set");
+        }
+        if (value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be >= 0");
+        }
+        return value;
+    }
+
+    private static int requirePositiveInt(
+        String name,
+        int value
+    ) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(name + " must be > 0");
+        }
+        return value;
+    }
+
+    private static String normalizeThreadNameFormat(
+        String value,
+        String fallback
+    ) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
     }
 }

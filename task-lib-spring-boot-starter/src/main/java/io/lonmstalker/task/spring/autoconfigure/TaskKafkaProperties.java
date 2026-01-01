@@ -44,7 +44,7 @@ public class TaskKafkaProperties {
     }
 
     public void setPollInterval(Duration pollInterval) {
-        this.pollInterval = pollInterval;
+        this.pollInterval = requirePositiveDuration("pollInterval", pollInterval);
     }
 
     public Duration getLeaseDuration() {
@@ -52,7 +52,7 @@ public class TaskKafkaProperties {
     }
 
     public void setLeaseDuration(Duration leaseDuration) {
-        this.leaseDuration = leaseDuration;
+        this.leaseDuration = requirePositiveDuration("leaseDuration", leaseDuration);
     }
 
     public int getBatchSize() {
@@ -60,7 +60,7 @@ public class TaskKafkaProperties {
     }
 
     public void setBatchSize(int batchSize) {
-        this.batchSize = batchSize;
+        this.batchSize = requirePositiveInt("batchSize", batchSize);
     }
 
     public Duration getPublishTimeout() {
@@ -68,7 +68,7 @@ public class TaskKafkaProperties {
     }
 
     public void setPublishTimeout(Duration publishTimeout) {
-        this.publishTimeout = publishTimeout;
+        this.publishTimeout = requirePositiveDuration("publishTimeout", publishTimeout);
     }
 
     public Duration getFailureBackoff() {
@@ -76,7 +76,7 @@ public class TaskKafkaProperties {
     }
 
     public void setFailureBackoff(Duration failureBackoff) {
-        this.failureBackoff = failureBackoff;
+        this.failureBackoff = requireNonNegativeDuration("failureBackoff", failureBackoff);
     }
 
     public int getMaxPublishAttempts() {
@@ -84,7 +84,7 @@ public class TaskKafkaProperties {
     }
 
     public void setMaxPublishAttempts(int maxPublishAttempts) {
-        this.maxPublishAttempts = maxPublishAttempts;
+        this.maxPublishAttempts = requireNonNegativeInt("maxPublishAttempts", maxPublishAttempts);
     }
 
     public List<String> getBootstrapServers() {
@@ -92,7 +92,7 @@ public class TaskKafkaProperties {
     }
 
     public void setBootstrapServers(List<String> bootstrapServers) {
-        this.bootstrapServers = bootstrapServers;
+        this.bootstrapServers = normalizeList(bootstrapServers);
     }
 
     public Map<String, String> getProducerProperties() {
@@ -100,7 +100,11 @@ public class TaskKafkaProperties {
     }
 
     public void setProducerProperties(Map<String, String> producerProperties) {
-        this.producerProperties = producerProperties;
+        if (producerProperties == null || producerProperties.isEmpty()) {
+            this.producerProperties = new LinkedHashMap<>();
+            return;
+        }
+        this.producerProperties = new LinkedHashMap<>(producerProperties);
     }
 
     public String getTopic() {
@@ -124,6 +128,71 @@ public class TaskKafkaProperties {
     }
 
     public void setThreadNameFormat(String threadNameFormat) {
-        this.threadNameFormat = threadNameFormat;
+        this.threadNameFormat = normalizeThreadNameFormat(threadNameFormat, "task-kafka-publisher-%d");
+    }
+
+    private static Duration requirePositiveDuration(
+        String name,
+        Duration value
+    ) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must be set");
+        }
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be > 0");
+        }
+        return value;
+    }
+
+    private static Duration requireNonNegativeDuration(
+        String name,
+        Duration value
+    ) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " must be set");
+        }
+        if (value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be >= 0");
+        }
+        return value;
+    }
+
+    private static int requirePositiveInt(
+        String name,
+        int value
+    ) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(name + " must be > 0");
+        }
+        return value;
+    }
+
+    private static int requireNonNegativeInt(
+        String name,
+        int value
+    ) {
+        if (value < 0) {
+            throw new IllegalArgumentException(name + " must be >= 0");
+        }
+        return value;
+    }
+
+    private static List<String> normalizeList(
+        List<String> value
+    ) {
+        if (value == null || value.isEmpty()) {
+            return List.of();
+        }
+        return List.copyOf(value);
+    }
+
+    private static String normalizeThreadNameFormat(
+        String value,
+        String fallback
+    ) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
     }
 }
