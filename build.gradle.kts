@@ -14,6 +14,7 @@ import org.gradle.plugins.signing.SigningExtension
 plugins {
     id("base")
     id("com.github.spotbugs") version "6.0.20" apply false
+    id("maven-publish") apply false
 }
 
 fun Project.requireProperty(
@@ -44,7 +45,7 @@ val publishableProjects = setOf(
 )
 
 val moduleDescriptions = mapOf(
-    "task-lib" to "Task execution library with Postgres storage, Kafka outbox publishing, " +
+    "task-lib" to "Task execution engine with Postgres storage, Kafka outbox publishing, " +
         "and Spring Boot auto-configuration.",
     "task-lib-api" to "Public API for defining tasks, states, handlers, and submission.",
     "task-lib-impl" to "Task engine implementation and PostgreSQL-backed store.",
@@ -57,7 +58,7 @@ val moduleDescriptions = mapOf(
 allprojects {
     group = rootProject.group
     version = resolvedVersion
-    description = moduleDescriptions[name] ?: "Task Lib module: ${project.name}"
+    description = moduleDescriptions[name] ?: "Task Engine module: ${project.name}"
 
     repositories {
         mavenCentral()
