@@ -4,7 +4,7 @@ Task execution library with Postgres storage, Kafka outbox publishing, and Sprin
 
 ## Documentation
 
-- English: `docs/README.md`
+- English: `docs/en/README.md`
 - Russian: `docs/ru/README.md`
 
 ## Modules
