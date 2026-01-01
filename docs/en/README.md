@@ -19,6 +19,7 @@ This documentation follows the [Diataxis framework](https://diataxis.fr/):
 - **Getting Started**: [Quick Start Tutorial](./tutorials/01-quick-start.md)
 - **API Reference**: [Reference Overview](./reference/README.md)
 - **Contributing**: [How to Contribute](./explanation/contributing.md)
+- **Release**: [Release to Maven Central](./explanation/contributing.md#release)
 
 ## Languages
 

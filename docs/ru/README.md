@@ -19,6 +19,7 @@
 - **Быстрый старт**: [Quick Start Tutorial](./tutorials/01-quick-start.md)
 - **Справка API**: [Reference Overview](./reference/README.md)
 - **Вклад в проект**: [How to Contribute](./explanation/contributing.md)
+- **Релиз**: [Публикация в Maven Central](./explanation/contributing.md#релиз)
 
 ## Языки
 

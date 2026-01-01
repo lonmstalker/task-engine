@@ -58,6 +58,7 @@ dependencies {
 ## Release
 
 - Update `gradle.properties` version and `CHANGELOG.md`.
+- Central Portal release steps: `docs/en/explanation/contributing.md#release`.
 - Publish locally: `./gradlew publishToMavenLocal`
 - Publish a release: `./gradlew -Prelease publish` or `./gradlew -PreleaseVersion=1.0.0 publish`
   (requires signing + POM metadata in `gradle.properties`)
