@@ -223,6 +223,7 @@ class KafkaTaskEventPublisherIntegrationTest extends KafkaPostgresIntegrationTes
             TASK_TYPE,
             TASK_STATE,
             TaskStatus.PENDING,
+            null,
             0,
             1,
             null,

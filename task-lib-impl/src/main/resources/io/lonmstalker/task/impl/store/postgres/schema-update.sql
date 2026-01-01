@@ -9,6 +9,9 @@ CREATE INDEX IF NOT EXISTS task_links_depends_idx
 ALTER TABLE task_event_outbox
     ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(128) NULL;
 
+ALTER TABLE task_tasks
+    ADD COLUMN IF NOT EXISTS task_name VARCHAR(255) NULL;
+
 ALTER TABLE task_event_outbox
     ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ NULL;
 

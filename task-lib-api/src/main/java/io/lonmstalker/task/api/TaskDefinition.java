@@ -2,6 +2,7 @@ package io.lonmstalker.task.api;
 
 import io.lonmstalker.task.api.model.TaskType;
 import io.lonmstalker.task.api.state.TaskStateMachine;
+import io.lonmstalker.task.api.store.TaskStore;
 import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -18,6 +19,7 @@ public final class TaskDefinition<C> {
     private final @NonNull TaskStateMachine stateMachine;
     private final @NonNull RetryPolicy retryPolicy;
     private final boolean contributesToChainContext;
+    private final @Nullable TaskStore store;
 
     private TaskDefinition(
         @NonNull Builder<C> builder
@@ -29,6 +31,7 @@ public final class TaskDefinition<C> {
         this.stateMachine = Objects.requireNonNull(builder.stateMachine, "stateMachine");
         this.retryPolicy = Objects.requireNonNull(builder.retryPolicy, "retryPolicy");
         this.contributesToChainContext = builder.contributesToChainContext;
+        this.store = builder.store;
     }
 
     public static <C> @NonNull Builder<C> builder() {
@@ -98,6 +101,15 @@ public final class TaskDefinition<C> {
         return contributesToChainContext;
     }
 
+    /**
+     * Returns custom store for this task type.
+     *
+     * @return custom store or null if default should be used
+     */
+    public @Nullable TaskStore store() {
+        return store;
+    }
+
     public static final class Builder<C> {
         private @Nullable TaskType type;
         private @Nullable TaskHandler<C> handler;
@@ -106,6 +118,7 @@ public final class TaskDefinition<C> {
         private @Nullable TaskStateMachine stateMachine;
         private @Nullable RetryPolicy retryPolicy;
         private boolean contributesToChainContext;
+        private @Nullable TaskStore store;
 
         private Builder() {
         }
@@ -198,6 +211,19 @@ public final class TaskDefinition<C> {
             boolean contributesToChainContext
         ) {
             this.contributesToChainContext = contributesToChainContext;
+            return this;
+        }
+
+        /**
+         * Sets custom store for this task type.
+         *
+         * @param store task store
+         * @return builder
+         */
+        public @NonNull Builder<C> store(
+            @NonNull TaskStore store
+        ) {
+            this.store = Objects.requireNonNull(store, "store");
             return this;
         }
 

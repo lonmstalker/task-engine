@@ -59,6 +59,7 @@ public final class KafkaOutboxPublisherExample {
             TaskType.of("kafka"),
             STATE_DONE,
             TaskStatus.COMPLETED,
+            null,
             1,
             1,
             null,

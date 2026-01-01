@@ -68,6 +68,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "base",
                 List.of()
             ));
@@ -75,6 +76,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "dup",
                 List.of()
             ));
@@ -131,6 +133,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("parent-task"),
                 definitionA.type(),
                 STATE_NEW,
+                null,
                 "a",
                 List.of()
             ));
@@ -141,6 +144,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 childKey,
                 definitionB.type(),
                 STATE_NEW,
+                null,
                 "b",
                 List.of(linkA)
             ));
@@ -198,6 +202,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("fail-task"),
                 definitionA.type(),
                 STATE_NEW,
+                null,
                 "ctx-a",
                 List.of()
             ));
@@ -207,6 +212,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("child-task"),
                 definitionB.type(),
                 STATE_NEW,
+                null,
                 "ctx-b",
                 List.of(linkA)
             ));
@@ -267,6 +273,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                             key,
                             definition.type(),
                             STATE_NEW,
+                            null,
                             List.of(user),
                             List.of()
                         ));
@@ -316,6 +323,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "base",
                 List.of()
             ));
@@ -326,6 +334,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "late",
                 List.of()
             ));
@@ -387,6 +396,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "first",
                 List.of()
             ));
@@ -399,6 +409,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "second",
                 List.of()
             ));
@@ -460,6 +471,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "ctx",
                 List.of()
             ));
@@ -508,6 +520,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 key,
                 definition.type(),
                 STATE_NEW,
+                null,
                 "ctx",
                 List.of()
             ));
@@ -556,6 +569,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("dep-fail-root"),
                 definitionA.type(),
                 STATE_NEW,
+                null,
                 "root",
                 List.of()
             ));
@@ -565,6 +579,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("dep-fail-child"),
                 definitionB.type(),
                 STATE_NEW,
+                null,
                 "child",
                 List.of(link)
             ));
@@ -616,6 +631,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("dep-fail-existing"),
                 definitionA.type(),
                 STATE_NEW,
+                null,
                 "root",
                 List.of()
             ));
@@ -631,6 +647,7 @@ class TaskEnginePostgresIntegrationTest extends PostgresIntegrationTestBase {
                 TaskKey.of("dep-fail-late-child"),
                 definitionB.type(),
                 STATE_NEW,
+                null,
                 "child",
                 List.of(link)
             ));

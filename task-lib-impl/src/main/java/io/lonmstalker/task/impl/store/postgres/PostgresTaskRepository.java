@@ -38,6 +38,7 @@ final class PostgresTaskRepository {
             task_type,
             task_state,
             task_status,
+            task_name,
             attempt,
             max_attempts,
             next_run_at,
@@ -49,13 +50,14 @@ final class PostgresTaskRepository {
             updated_at,
             last_error_type,
             last_error_message
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
     private static final @NonNull String UPDATE_TASK_SQL = """
         UPDATE task_tasks
         SET task_state = ?,
             task_status = ?,
+            task_name = ?,
             attempt = ?,
             max_attempts = ?,
             next_run_at = ?,
@@ -73,6 +75,7 @@ final class PostgresTaskRepository {
         UPDATE task_tasks
         SET task_state = ?,
             task_status = ?,
+            task_name = ?,
             attempt = ?,
             max_attempts = ?,
             next_run_at = ?,
@@ -337,7 +340,7 @@ final class PostgresTaskRepository {
                 TaskRecord updated = updater.update(existing);
                 try (PreparedStatement statement = connection.prepareStatement(UPDATE_TASK_SQL)) {
                     bindTaskUpdate(statement, updated);
-                    statement.setObject(13, updated.id().value());
+                    statement.setObject(14, updated.id().value());
                     statement.executeUpdate();
                 }
 
@@ -491,7 +494,7 @@ final class PostgresTaskRepository {
             return transactionManager.withConnection(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(UPDATE_TASK_SQL)) {
                     bindTaskUpdate(statement, record);
-                    statement.setObject(13, record.id().value());
+                    statement.setObject(14, record.id().value());
                     statement.executeUpdate();
                 }
 
@@ -517,10 +520,10 @@ final class PostgresTaskRepository {
             return transactionManager.withConnection(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(UPDATE_TASK_IF_LEASED_SQL)) {
                     bindTaskUpdate(statement, record);
-                    statement.setObject(13, record.id().value());
-                    statement.setString(14, expectedLeaseOwner);
-                    statement.setTimestamp(15, toTimestamp(expectedLeaseUntil));
-                    statement.setTimestamp(16, toTimestamp(now));
+                    statement.setObject(14, record.id().value());
+                    statement.setString(15, expectedLeaseOwner);
+                    statement.setTimestamp(16, toTimestamp(expectedLeaseUntil));
+                    statement.setTimestamp(17, toTimestamp(now));
                     return statement.executeUpdate() == 1;
                 }
             });
@@ -762,16 +765,17 @@ final class PostgresTaskRepository {
         statement.setString(3, record.type().value());
         statement.setString(4, record.state().value());
         statement.setString(5, record.status().name());
-        statement.setInt(6, record.attempt());
-        statement.setInt(7, record.maxAttempts());
-        setInstant(statement, 8, record.nextRunAt());
-        statement.setString(9, record.leaseOwner());
-        setInstant(statement, 10, record.leaseUntil());
-        statement.setBytes(11, record.payload().data());
-        statement.setString(12, record.payload().contentType());
-        setInstant(statement, 13, record.createdAt());
-        setInstant(statement, 14, record.updatedAt());
-        setErrorInfo(statement, 15, 16, record.lastError());
+        statement.setString(6, record.name());
+        statement.setInt(7, record.attempt());
+        statement.setInt(8, record.maxAttempts());
+        setInstant(statement, 9, record.nextRunAt());
+        statement.setString(10, record.leaseOwner());
+        setInstant(statement, 11, record.leaseUntil());
+        statement.setBytes(12, record.payload().data());
+        statement.setString(13, record.payload().contentType());
+        setInstant(statement, 14, record.createdAt());
+        setInstant(statement, 15, record.updatedAt());
+        setErrorInfo(statement, 16, 17, record.lastError());
     }
 
     private void bindTaskUpdate(
@@ -780,15 +784,16 @@ final class PostgresTaskRepository {
     ) throws SQLException {
         statement.setString(1, record.state().value());
         statement.setString(2, record.status().name());
-        statement.setInt(3, record.attempt());
-        statement.setInt(4, record.maxAttempts());
-        setInstant(statement, 5, record.nextRunAt());
-        statement.setString(6, record.leaseOwner());
-        setInstant(statement, 7, record.leaseUntil());
-        statement.setBytes(8, record.payload().data());
-        statement.setString(9, record.payload().contentType());
-        setInstant(statement, 10, record.updatedAt());
-        setErrorInfo(statement, 11, 12, record.lastError());
+        statement.setString(3, record.name());
+        statement.setInt(4, record.attempt());
+        statement.setInt(5, record.maxAttempts());
+        setInstant(statement, 6, record.nextRunAt());
+        statement.setString(7, record.leaseOwner());
+        setInstant(statement, 8, record.leaseUntil());
+        statement.setBytes(9, record.payload().data());
+        statement.setString(10, record.payload().contentType());
+        setInstant(statement, 11, record.updatedAt());
+        setErrorInfo(statement, 12, 13, record.lastError());
     }
 
     private void setInstant(
@@ -828,6 +833,7 @@ final class PostgresTaskRepository {
         TaskType type = new TaskType(resultSet.getString("task_type"));
         TaskState state = new TaskState(resultSet.getString("task_state"));
         TaskStatus status = TaskStatus.valueOf(resultSet.getString("task_status"));
+        String name = resultSet.getString("task_name");
         int attempt = resultSet.getInt("attempt");
         int maxAttempts = resultSet.getInt("max_attempts");
         Instant nextRunAt = toInstant(resultSet.getTimestamp("next_run_at"));
@@ -853,6 +859,7 @@ final class PostgresTaskRepository {
             type,
             state,
             status,
+            name,
             attempt,
             maxAttempts,
             nextRunAt,

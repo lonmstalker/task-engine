@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -37,7 +38,7 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
     private static final int DEFAULT_BATCH_SIZE = 100;
 
     private final @NonNull TaskEventOutboxStore outboxStore;
-    private final @NonNull KafkaProducer<String, byte[]> producer;
+    private final @NonNull Producer<String, byte[]> producer;
     private final @NonNull String topic;
     private final @NonNull String leaseOwner;
     private final @NonNull Duration leaseDuration;
@@ -92,6 +93,24 @@ public final class KafkaTaskEventPublisher implements AutoCloseable {
     public KafkaTaskEventPublisher(
         @NonNull TaskEventOutboxStore outboxStore,
         @NonNull KafkaProducer<String, byte[]> producer,
+        @NonNull KafkaTaskEventPublisherConfig config,
+        @NonNull TaskEventMessageCodec messageCodec,
+        @NonNull TaskEventKeyProvider keyProvider,
+        @NonNull Clock clock
+    ) {
+        this(
+            outboxStore,
+            (Producer<String, byte[]>) producer,
+            config,
+            messageCodec,
+            keyProvider,
+            clock
+        );
+    }
+
+    public KafkaTaskEventPublisher(
+        @NonNull TaskEventOutboxStore outboxStore,
+        @NonNull Producer<String, byte[]> producer,
         @NonNull KafkaTaskEventPublisherConfig config,
         @NonNull TaskEventMessageCodec messageCodec,
         @NonNull TaskEventKeyProvider keyProvider,

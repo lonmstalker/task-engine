@@ -70,6 +70,7 @@ final class TaskSubmissionService {
             request.type(),
             resolvedState,
             initialStatus,
+            request.name(),
             0,
             definition.retryPolicy().maxAttempts(),
             nextRunAt,
@@ -158,12 +159,15 @@ final class TaskSubmissionService {
             newPayload = codec.encode(merged);
         }
 
+        String resolvedName = existing.name() != null ? existing.name() : request.name();
+
         return new TaskRecord(
             existing.id(),
             existing.key(),
             existing.type(),
             newState,
             existing.status(),
+            resolvedName,
             existing.attempt(),
             existing.maxAttempts(),
             existing.nextRunAt(),
@@ -253,6 +257,7 @@ final class TaskSubmissionService {
             record.type(),
             record.state(),
             TaskStatus.CANCELLED,
+            record.name(),
             record.attempt(),
             record.maxAttempts(),
             null,

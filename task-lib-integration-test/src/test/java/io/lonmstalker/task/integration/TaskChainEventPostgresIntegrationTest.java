@@ -78,6 +78,7 @@ class TaskChainEventPostgresIntegrationTest extends PostgresIntegrationTestBase 
                 TaskKey.of("chain-a"),
                 definitionA.type(),
                 STATE_NEW,
+                null,
                 "ctx-a",
                 List.of()
             ));
@@ -86,6 +87,7 @@ class TaskChainEventPostgresIntegrationTest extends PostgresIntegrationTestBase 
                 TaskKey.of("chain-c"),
                 definitionC.type(),
                 STATE_NEW,
+                null,
                 "ctx-c",
                 List.of()
             ));
@@ -97,6 +99,7 @@ class TaskChainEventPostgresIntegrationTest extends PostgresIntegrationTestBase 
                 TaskKey.of("chain-b"),
                 definitionB.type(),
                 STATE_NEW,
+                null,
                 "ctx-b",
                 List.of(linkA, linkC)
             ));
@@ -151,6 +154,7 @@ class TaskChainEventPostgresIntegrationTest extends PostgresIntegrationTestBase 
                 TaskKey.of("multi-state"),
                 definition.type(),
                 STATE_NEW,
+                null,
                 "ctx",
                 List.of()
             ));

@@ -14,7 +14,7 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 
 final class KafkaTaskEventPublisherReporter implements SmartInitializingSingleton {
 
-    private static final Logger logger = LoggerFactory.getLogger(KafkaTaskEventPublisherReporter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(KafkaTaskEventPublisherReporter.class);
 
     private final KafkaTaskEventPublisher publisher;
     private final KafkaTaskEventPublisherLifecycle lifecycle;
@@ -41,7 +41,7 @@ final class KafkaTaskEventPublisherReporter implements SmartInitializingSingleto
             ? "[]"
             : extraProperties.keySet().stream().sorted().collect(Collectors.toList()).toString();
 
-        logger.info(
+        LOGGER.info(
             "Kafka task event publisher configured: type={}, topic={}, batchSize={}, pollInterval={}, leaseDuration={}, "
                 + "publishTimeout={}, failureBackoff={}, maxPublishAttempts={}, autoStart={}, threadNameFormat={}, "
                 + "bootstrapServers={}, producerPropertiesKeys={}",

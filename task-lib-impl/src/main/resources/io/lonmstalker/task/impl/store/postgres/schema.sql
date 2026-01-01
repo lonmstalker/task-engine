@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS task_tasks (
     task_type VARCHAR(255) NOT NULL,
     task_state VARCHAR(255) NOT NULL,
     task_status VARCHAR(32) NOT NULL,
+    task_name VARCHAR(255) NULL,
     attempt INTEGER NOT NULL,
     max_attempts INTEGER NOT NULL,
     next_run_at TIMESTAMPTZ NULL,

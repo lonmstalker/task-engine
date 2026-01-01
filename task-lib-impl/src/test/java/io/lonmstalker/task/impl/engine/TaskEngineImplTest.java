@@ -84,6 +84,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     List.of("user-a"),
                     List.of()
                 ));
@@ -92,6 +93,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     List.of("user-b"),
                     List.of()
                 ));
@@ -130,6 +132,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "ctx",
                     List.of()
                 ));
@@ -138,6 +141,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_PROCESSING,
+                    null,
                     "ctx",
                     List.of()
                 ));
@@ -177,6 +181,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "ctx",
                     List.of()
                 ));
@@ -223,6 +228,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "ctx",
                     List.of()
                 ));
@@ -290,6 +296,7 @@ class TaskEngineImplTest {
                                 key,
                                 definition.type(),
                                 STATE_NEW,
+                                null,
                                 List.of(user),
                                 List.of()
                             ));
@@ -371,6 +378,7 @@ class TaskEngineImplTest {
                     key1,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "one",
                     List.of()
                 ));
@@ -378,6 +386,7 @@ class TaskEngineImplTest {
                     key2,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "two",
                     List.of()
                 ));
@@ -438,6 +447,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "first",
                     List.of()
                 ));
@@ -452,6 +462,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "second",
                     List.of()
                 ));
@@ -524,6 +535,7 @@ class TaskEngineImplTest {
                     TaskKey.of("chain-a"),
                     definitionA.type(),
                     STATE_NEW,
+                    null,
                     "ctx-a",
                     List.of()
                 ));
@@ -532,6 +544,7 @@ class TaskEngineImplTest {
                     TaskKey.of("chain-c"),
                     definitionC.type(),
                     STATE_NEW,
+                    null,
                     "ctx-c",
                     List.of()
                 ));
@@ -543,6 +556,7 @@ class TaskEngineImplTest {
                     TaskKey.of("chain-b"),
                     definitionB.type(),
                     STATE_NEW,
+                    null,
                     "ctx-b",
                     List.of(linkA, linkC)
                 ));
@@ -605,6 +619,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "base",
                     List.of()
                 ));
@@ -613,6 +628,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "dup",
                     List.of()
                 ));
@@ -666,6 +682,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "base",
                     List.of()
                 ));
@@ -677,6 +694,7 @@ class TaskEngineImplTest {
                     key,
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "late",
                     List.of()
                 ));
@@ -726,6 +744,7 @@ class TaskEngineImplTest {
                     TaskKey.of("fail-task"),
                     definition.type(),
                     STATE_NEW,
+                    null,
                     "ctx",
                     List.of()
                 ));
@@ -780,6 +799,7 @@ class TaskEngineImplTest {
                     TaskKey.of("parent"),
                     definitionA.type(),
                     STATE_NEW,
+                    null,
                     "ctx-a",
                     List.of()
                 ));
@@ -789,6 +809,7 @@ class TaskEngineImplTest {
                     TaskKey.of("child"),
                     definitionB.type(),
                     STATE_NEW,
+                    null,
                     "ctx-b",
                     List.of(linkA)
                 ));

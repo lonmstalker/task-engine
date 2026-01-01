@@ -11,7 +11,7 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 
 final class TaskDispatcherReporter implements SmartInitializingSingleton {
 
-    private static final Logger logger = LoggerFactory.getLogger(TaskDispatcherReporter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskDispatcherReporter.class);
 
     private final TaskDispatcher dispatcher;
     private final ObjectProvider<MeterRegistry> meterRegistryProvider;
@@ -28,7 +28,7 @@ final class TaskDispatcherReporter implements SmartInitializingSingleton {
     public void afterSingletonsInstantiated() {
         if (dispatcher instanceof TaskDispatcherDescriptor descriptor) {
             boolean virtualThreads = descriptor.usesVirtualThreads();
-            logger.info(
+            LOGGER.info(
                 "Task dispatcher configured: type={}, virtualThreads={}, parallelism={}, threadNameFormat={}",
                 dispatcher.getClass().getName(),
                 virtualThreads,
@@ -46,7 +46,7 @@ final class TaskDispatcherReporter implements SmartInitializingSingleton {
                     .register(registry);
             }
         } else {
-            logger.info(
+            LOGGER.info(
                 "Task dispatcher configured: type={}, virtualThreads=unknown (implement TaskDispatcherDescriptor for observability)",
                 dispatcher.getClass().getName()
             );

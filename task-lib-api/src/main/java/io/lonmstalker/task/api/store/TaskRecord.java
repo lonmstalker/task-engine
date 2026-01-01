@@ -21,6 +21,7 @@ public record TaskRecord(
     @NonNull TaskType type,
     @NonNull TaskState state,
     @NonNull TaskStatus status,
+    @Nullable String name,
     int attempt,
     int maxAttempts,
     @Nullable Instant nextRunAt,
