@@ -14,7 +14,6 @@ import org.gradle.plugins.signing.SigningExtension
 plugins {
     id("base")
     id("com.github.spotbugs") version "6.0.20" apply false
-    id("maven-publish") apply false
 }
 
 fun Project.requireProperty(
