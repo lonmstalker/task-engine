@@ -1,6 +1,6 @@
-# Task Lib
+# Task Engine
 
-Task execution library with Postgres storage, Kafka outbox publishing, and Spring Boot auto-configuration.
+Task execution engine with Postgres storage, Kafka outbox publishing, and Spring Boot auto-configuration.
 
 ## Documentation
 

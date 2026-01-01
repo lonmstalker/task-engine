@@ -1,6 +1,6 @@
 # Documentation
 
-> Task Lib documentation.
+> Task Engine documentation.
 
 ## Structure
 
