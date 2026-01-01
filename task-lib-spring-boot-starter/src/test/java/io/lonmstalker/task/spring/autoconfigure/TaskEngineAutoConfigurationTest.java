@@ -173,6 +173,7 @@ class TaskEngineAutoConfigurationTest {
                     key,
                     TaskType.of("sample"),
                     STATE_NEW,
+                    null,
                     "payload",
                     List.of()
                 ));
@@ -203,6 +204,7 @@ class TaskEngineAutoConfigurationTest {
                     key,
                     TaskType.of("sample"),
                     STATE_NEW,
+                    null,
                     "payload",
                     List.of()
                 ));
@@ -261,7 +263,8 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
-                    .hasMessageContaining("pollInterval must be >= 1ms");
+                    .rootCause()
+                    .hasMessageContaining("pollInterval must be > 0");
             });
     }
 
@@ -273,6 +276,7 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
+                    .rootCause()
                     .hasMessageContaining("leaseDuration must be >= 0");
             });
     }
@@ -285,7 +289,8 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
-                    .hasMessageContaining("recoveryInterval must be >= 1ms");
+                    .rootCause()
+                    .hasMessageContaining("recoveryInterval must be > 0");
             });
     }
 
@@ -297,6 +302,7 @@ class TaskEngineAutoConfigurationTest {
             .run(context -> {
                 assertThat(context).hasFailed();
                 assertThat(context.getStartupFailure())
+                    .rootCause()
                     .hasMessageContaining("claimBatchSize must be > 0");
             });
     }
@@ -637,6 +643,7 @@ class TaskEngineAutoConfigurationTest {
                         record.type(),
                         record.state(),
                         TaskStatus.RUNNING,
+                        null,
                         record.attempt() + 1,
                         record.maxAttempts(),
                         record.nextRunAt(),
@@ -706,6 +713,7 @@ class TaskEngineAutoConfigurationTest {
                         record.type(),
                         record.state(),
                         TaskStatus.PENDING,
+                        null,
                         record.attempt(),
                         record.maxAttempts(),
                         record.nextRunAt(),
